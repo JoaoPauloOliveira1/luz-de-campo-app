@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: luz-de-campo-frontend
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_FIELD_API_BASE_URL
+        value: https://luz-de-campo.onrender.com
