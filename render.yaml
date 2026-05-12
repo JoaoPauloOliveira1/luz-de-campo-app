@@ -6,4 +6,4 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_FIELD_API_BASE_URL
-        value: https://luz-de-campo.onrender.com
+        value: https://cadastroeditor-api.onrender.com
