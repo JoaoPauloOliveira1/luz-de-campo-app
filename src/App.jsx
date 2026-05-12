@@ -353,7 +353,11 @@ function buildExportRow(row) {
 }
 
 function isEntryReadyToSync(entry) {
-  return Number.isFinite(toNumber(entry?.LATITUDE)) && Number.isFinite(toNumber(entry?.LONGITUDE));
+  return (
+    Number.isFinite(toNumber(entry?.LATITUDE))
+    && Number.isFinite(toNumber(entry?.LONGITUDE))
+    && entry?.IMPLANTACAO_CONCLUIDA === 'SIM'
+  );
 }
 
 function buildFormFocusSequence(currentForm) {
@@ -1797,7 +1801,7 @@ export default function App() {
 
   const handleSyncEntries = useCallback(async () => {
     if (!syncablePendingEntries.length) {
-      setToast('Confirme o local dos pontos antes de sincronizar com o banco.');
+      setToast('Confirme o local e marque implantação concluída = SIM antes de sincronizar.');
       return;
     }
 
@@ -2030,7 +2034,7 @@ export default function App() {
     setToast(
       isEntryReadyToSync(form)
         ? (editingEntryId ? 'Ponto atualizado. Toque em Novo ponto para seguir.' : 'Ponto salvo. Toque em Novo ponto para seguir.')
-        : 'Ponto salvo, mas ainda sem local confirmado.'
+        : 'Ponto salvo, mas ainda não está pronto para envio.'
     );
   }, [activeOperator, confirmedPosition, editingEntryId, entries, form]);
 
@@ -2075,7 +2079,7 @@ export default function App() {
 
   const handleSyncSingleEntry = useCallback(async (entry) => {
     if (!isEntryReadyToSync(entry)) {
-      setToast('Esse ponto ainda está sem local confirmado.');
+      setToast('Confirme o local e marque implantação concluída = SIM antes de enviar.');
       return;
     }
 
@@ -2625,7 +2629,7 @@ export default function App() {
             <div className="queue-counter">
               <strong>{operatorEntries.length}</strong>
               <span>
-                {syncablePendingEntries.length} pronto(s) para envio · {awaitingConfirmationEntries.length} sem local confirmado · {online ? 'online' : 'offline'}
+                {syncablePendingEntries.length} pronto(s) para envio · {awaitingConfirmationEntries.length} pendente(s) de confirmação · {online ? 'online' : 'offline'}
               </span>
             </div>
             <div className="queue-filters" role="tablist" aria-label="Filtrar fila local">
@@ -2648,7 +2652,7 @@ export default function App() {
                 className={`queue-filter${queueFilter === 'waiting' ? ' active' : ''}`}
                 onClick={() => setQueueFilter('waiting')}
               >
-                Sem local confirmado
+                Pendentes
               </button>
             </div>
           </div>
@@ -2687,12 +2691,12 @@ export default function App() {
                     <span>{countLuminaireImages(entry.LUMINARIAS || [])} foto(s) anexada(s)</span>
                   )}
                   <small>
-                    {entry.LATITUDE}, {entry.LONGITUDE} · {entry.__syncStatus === 'synced' ? 'Sincronizado' : isEntryReadyToSync(entry) ? 'Pronto para envio' : 'Sem local confirmado'}
+                    {entry.LATITUDE}, {entry.LONGITUDE} · {entry.__syncStatus === 'synced' ? 'Sincronizado' : isEntryReadyToSync(entry) ? 'Pronto para envio' : 'Pendente de confirmação'}
                   </small>
                 </div>
                 <div className="queue-item-actions">
                   {!isEntryReadyToSync(entry) && (
-                    <span className="queue-warning">Sem local confirmado</span>
+                    <span className="queue-warning">Confirme local e conclusão</span>
                   )}
                   <button type="button" className="shortcut-action shortcut-action-light" onClick={() => handleEditEntry(entry)}>
                     Editar
