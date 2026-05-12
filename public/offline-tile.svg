@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <rect width="256" height="256" fill="#edf3fb"/>
+  <path d="M0 64H256M0 128H256M0 192H256M64 0V256M128 0V256M192 0V256" stroke="#d5e0f2" stroke-width="1"/>
+  <path d="M46 152L83 111L116 129L162 80L207 116" stroke="#1d4ed8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="46" cy="152" r="7" fill="#b91c1c"/>
+  <circle cx="83" cy="111" r="7" fill="#b91c1c"/>
+  <circle cx="116" cy="129" r="7" fill="#b91c1c"/>
+  <circle cx="162" cy="80" r="7" fill="#b91c1c"/>
+  <circle cx="207" cy="116" r="7" fill="#b91c1c"/>
+  <rect x="28" y="176" width="200" height="40" rx="12" fill="#ffffff" fill-opacity=".9"/>
+  <text x="128" y="193" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#1e3a5f">MODO OFFLINE</text>
+  <text x="128" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#48607d">Base local de Recife ativa</text>
+</svg>

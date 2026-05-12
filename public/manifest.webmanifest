@@ -1,0 +1,9 @@
+{
+  "name": "Luz de Campo",
+  "short_name": "LuzCampo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef3fb",
+  "theme_color": "#0b2f6d",
+  "icons": []
+}
