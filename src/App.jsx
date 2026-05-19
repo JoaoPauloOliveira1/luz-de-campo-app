@@ -1356,6 +1356,7 @@ export default function App() {
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
+  const [managerTableMaximized, setManagerTableMaximized] = useState(false);
   const [managerRowActionId, setManagerRowActionId] = useState('');
   const [managerUserForm, setManagerUserForm] = useState({
     managerAccessCode: '',
@@ -2710,11 +2711,20 @@ export default function App() {
             </div>
           </section>
 
-          <section className="panel manager-panel manager-table-panel">
+          <section className={`panel manager-panel manager-table-panel${managerTableMaximized ? ' is-maximized' : ''}`}>
             <div className="panel-header">
-              <span className="panel-step">Registros</span>
-              <strong>Pontos registrados</strong>
-              <small>{managerTableRows.length} linha(s) no recorte ativo</small>
+              <div>
+                <span className="panel-step">Registros</span>
+                <strong>Pontos registrados</strong>
+                <small>{managerTableRows.length} linha(s) no recorte ativo</small>
+              </div>
+              <button
+                type="button"
+                className="manager-maximize-button"
+                onClick={() => setManagerTableMaximized((current) => !current)}
+              >
+                {managerTableMaximized ? 'Voltar' : 'Maximizar'}
+              </button>
             </div>
 
             {managerRowsLoading ? (
