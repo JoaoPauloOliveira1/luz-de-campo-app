@@ -98,6 +98,20 @@ const MANAGER_LUMINAIRE_FIELDS = [
   'LINK_IMAGEM_5',
 ];
 
+const MANAGER_COMPACT_TABLE_FIELDS = [
+  'RPA',
+  'BAIRRO',
+  'ENDERECO',
+  'TIPO_DE_PO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
+  'IMPLANTACAO_CONCLUIDA',
+  'OPERADOR',
+  'SYNCED_EM',
+];
+
+const MANAGER_DETAIL_ONLY_FIELDS = EXPORT_FIELDS.filter((field) => !MANAGER_COMPACT_TABLE_FIELDS.includes(field));
+
 const MANAGER_EDITABLE_FIELDS = new Set([
   'RPA',
   'ENDERECO',
@@ -1341,6 +1355,7 @@ export default function App() {
   const [managerRowsLoading, setManagerRowsLoading] = useState(false);
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
+  const [managerTableFilters, setManagerTableFilters] = useState({});
   const [managerRowActionId, setManagerRowActionId] = useState('');
   const [managerUserForm, setManagerUserForm] = useState({
     managerAccessCode: '',
@@ -1875,6 +1890,10 @@ export default function App() {
     setManagerUserForm((current) => ({ ...current, [field]: value }));
   }, []);
 
+  const handleManagerFilterChange = useCallback((field, value) => {
+    setManagerTableFilters((current) => ({ ...current, [field]: value }));
+  }, []);
+
   const handleLogin = useCallback(async (event) => {
     event.preventDefault();
 
@@ -2258,6 +2277,19 @@ export default function App() {
       ))}
     </div>
   ), [renderManagerTableCell]);
+
+  const managerTableRows = useMemo(() => managerRows
+    .map((row, index) => ({
+      row,
+      index,
+      exportRow: buildExportRow(row),
+      clientUuid: row.client_uuid || row.CLIENT_UUID || '',
+    }))
+    .filter(({ exportRow }) => MANAGER_COMPACT_TABLE_FIELDS.every((field) => {
+      const filter = (managerTableFilters[field] || '').trim().toLowerCase();
+      if (!filter) return true;
+      return formatManagerCellValue(exportRow[field]).toLowerCase().includes(filter);
+    })), [managerRows, managerTableFilters]);
 
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
@@ -2682,7 +2714,7 @@ export default function App() {
             <div className="panel-header">
               <span className="panel-step">Registros</span>
               <strong>Pontos registrados</strong>
-              <small>Revise, edite ou exclua os pontos sincronizados antes de usar no Cadastro Editor.</small>
+              <small>{managerTableRows.length} linha(s) no recorte ativo</small>
             </div>
 
             {managerRowsLoading ? (
@@ -2694,31 +2726,45 @@ export default function App() {
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
-                      <th>Resumo</th>
-                      <th>Local</th>
-                      <th>Implantacao</th>
-                      <th>Luminarias e fotos</th>
+                      <th>Item</th>
+                      {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
+                        <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
+                      ))}
+                      <th>Detalhes</th>
                       <th className="manager-table-actions-col">Ações</th>
+                    </tr>
+                    <tr className="manager-table-filter-row">
+                      <th />
+                      {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
+                        <th key={`filter-${field}`}>
+                          <input
+                            value={managerTableFilters[field] || ''}
+                            placeholder="filtrar..."
+                            onChange={(event) => handleManagerFilterChange(field, event.target.value)}
+                          />
+                        </th>
+                      ))}
+                      <th />
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
-                    {managerRows.map((row) => {
-                      const rowClientUuid = row.client_uuid || row.CLIENT_UUID || '';
+                    {managerTableRows.map(({ row, exportRow, clientUuid, index }) => {
+                      const rowClientUuid = clientUuid;
                       const isEditing = managerEditingClientUuid === rowClientUuid;
-                      const exportRow = buildExportRow(row);
                       return (
                         <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
-                          <td data-label="Resumo" className="manager-table-summary-cell">
-                            {renderManagerDetailGroup(MANAGER_SUMMARY_FIELDS, exportRow, isEditing)}
-                          </td>
-                          <td data-label="Local">
-                            {renderManagerDetailGroup(MANAGER_LOCATION_FIELDS, exportRow, isEditing)}
-                          </td>
-                          <td data-label="Implantacao">
-                            {renderManagerDetailGroup(MANAGER_INSTALLATION_FIELDS, exportRow, isEditing)}
-                          </td>
-                          <td data-label="Luminarias e fotos">
-                            {renderManagerDetailGroup(MANAGER_LUMINAIRE_FIELDS, exportRow, isEditing)}
+                          <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
+                          {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
+                            <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field}>
+                              {renderManagerTableCell(field, exportRow, isEditing)}
+                            </td>
+                          ))}
+                          <td data-label="Detalhes" className="manager-table-details-cell">
+                            <details className="manager-row-details">
+                              <summary>Ver dados</summary>
+                              {renderManagerDetailGroup(MANAGER_DETAIL_ONLY_FIELDS, exportRow, isEditing)}
+                            </details>
                           </td>
                           <td data-label="Ações" className="manager-table-actions-cell">
                             <div className="manager-table-actions">

@@ -920,24 +920,24 @@ select {
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.94);
+  border-radius: 20px;
+  background: rgba(250, 252, 255, 0.96);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .manager-submission-table {
   width: 100%;
-  min-width: 1480px;
+  min-width: 1580px;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .manager-submission-table th,
 .manager-submission-table td {
-  padding: 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .manager-submission-table th {
@@ -945,34 +945,76 @@ select {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  background: rgba(245, 248, 253, 0.92);
+  background: rgba(238, 244, 252, 0.96);
 }
 
 .manager-submission-table td {
-  color: var(--text);
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.68);
+  color: #173f78;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.74);
   overflow-wrap: anywhere;
 }
 
 .manager-submission-table th:nth-child(1),
 .manager-submission-table td:nth-child(1) {
-  width: 190px;
+  width: 56px;
 }
 
 .manager-submission-table th:nth-child(2),
 .manager-submission-table td:nth-child(2) {
-  width: 380px;
+  width: auto;
 }
 
 .manager-submission-table th:nth-child(3),
 .manager-submission-table td:nth-child(3) {
-  width: 430px;
+  width: auto;
 }
 
 .manager-submission-table th:nth-child(4),
 .manager-submission-table td:nth-child(4) {
-  width: 360px;
+  width: auto;
+}
+
+.manager-table-filter-row th {
+  padding: 4px 8px 8px;
+  background: rgba(238, 244, 252, 0.96);
+}
+
+.manager-table-filter-row input {
+  width: 100%;
+  min-height: 24px;
+  border: 1px solid rgba(91, 116, 151, 0.32);
+  border-radius: 5px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.manager-table-item-cell {
+  color: var(--blue);
+  font-weight: 800;
+  text-align: center;
+}
+
+.manager-table-details-cell {
+  min-width: 118px;
+}
+
+.manager-row-details summary {
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  list-style-position: inside;
+}
+
+.manager-row-details[open] {
+  min-width: 420px;
+}
+
+.manager-row-details[open] summary {
+  margin-bottom: 8px;
 }
 
 .manager-table-links {
@@ -1079,17 +1121,18 @@ select {
 }
 
 .manager-table-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 5px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
 }
 
 .manager-table-button {
   min-height: 28px;
-  padding: 5px 8px;
-  border-radius: 9px;
-  font-size: 11px;
-  width: 100%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  width: auto;
+  white-space: nowrap;
 }
 
 .manager-table-delete {
