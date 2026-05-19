@@ -827,6 +827,19 @@ select {
   margin: 0 auto;
 }
 
+.manager-layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.manager-layout .manager-panel {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
 .manager-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -889,8 +902,9 @@ select {
 
 .manager-submission-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .manager-submission-table th,
@@ -913,6 +927,7 @@ select {
   color: var(--text);
   font-size: 14px;
   background: rgba(255, 255, 255, 0.68);
+  overflow-wrap: anywhere;
 }
 
 .manager-submission-table tbody tr:hover td {
@@ -1281,6 +1296,39 @@ select {
   .field-layout {
     grid-template-columns: minmax(400px, 0.92fr) minmax(520px, 1.08fr);
     align-items: start;
+  }
+
+  .manager-layout {
+    grid-template-columns: minmax(320px, 0.86fr) minmax(620px, 1.14fr);
+    align-items: start;
+  }
+
+  .manager-summary-panel {
+    grid-column: 1;
+  }
+
+  .manager-table-panel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .manager-users-panel {
+    grid-column: 1;
+  }
+
+  .manager-summary-panel .manager-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-summary-panel .manager-actions,
+  .manager-summary-panel .manager-refresh {
+    justify-content: stretch;
+  }
+
+  .manager-summary-panel .primary-action,
+  .manager-summary-panel .ghost-action,
+  .manager-summary-panel .shortcut-action {
+    width: 100%;
   }
 
   .panel-location {

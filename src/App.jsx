@@ -1124,12 +1124,20 @@ async function updateFieldSubmission(clientUuid, payload) {
 }
 
 async function deleteFieldSubmission(clientUuid, payload) {
-  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(clientUuid)}/delete`, {
+  const normalizedClientUuid = String(clientUuid || '').trim();
+  if (!normalizedClientUuid) {
+    throw new Error('Não foi possível identificar este ponto para exclusão.');
+  }
+
+  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/delete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      client_uuid: normalizedClientUuid,
+    }),
   });
 
   if (!response.ok) {
@@ -1904,7 +1912,12 @@ export default function App() {
   }, [activeOperator, loadManagerSummary, loadManagerRows]);
 
   const handleStartManagerEdit = useCallback((row) => {
-    setManagerEditingClientUuid(row.client_uuid);
+    const clientUuid = row.client_uuid || row.CLIENT_UUID || '';
+    if (!clientUuid) {
+      setToast('Não foi possível identificar este ponto para edição. Atualize a lista e tente novamente.');
+      return;
+    }
+    setManagerEditingClientUuid(clientUuid);
     setManagerEditDraft({
       RPA: row.rpa || '',
       ENDERECO: row.endereco || '',
@@ -1927,6 +1940,10 @@ export default function App() {
 
   const handleSaveManagerEdit = useCallback(async (clientUuid) => {
     if (!activeOperator?.can_export) return;
+    if (!clientUuid) {
+      setToast('Não foi possível identificar este ponto para edição. Atualize a lista e tente novamente.');
+      return;
+    }
     if (!managerUserForm.managerAccessCode.trim()) {
       setToast('Informe o código gerencial antes de editar pontos.');
       return;
@@ -1963,12 +1980,17 @@ export default function App() {
       setToast('Informe o código gerencial antes de excluir pontos.');
       return;
     }
+    const clientUuid = row.client_uuid || row.CLIENT_UUID || '';
+    if (!clientUuid) {
+      setToast('Não foi possível identificar este ponto para exclusão. Atualize a lista e tente novamente.');
+      return;
+    }
     const confirmed = window.confirm(`Excluir o ponto registrado por ${row.operador || 'campo'}?`);
     if (!confirmed) return;
 
     try {
-      setManagerRowActionId(row.client_uuid);
-      await deleteFieldSubmission(row.client_uuid, {
+      setManagerRowActionId(clientUuid);
+      await deleteFieldSubmission(clientUuid, {
         manager_operator_id: activeOperator.id,
         manager_access_code: managerUserForm.managerAccessCode.trim(),
       });
@@ -2344,8 +2366,8 @@ export default function App() {
           </div>
         </header>
 
-        <main className="field-layout">
-          <section className="panel manager-panel">
+        <main className="manager-layout">
+          <section className="panel manager-panel manager-summary-panel">
             <div className="panel-header">
               <span className="panel-step">Gestão</span>
               <strong>Visão dos registros sincronizados</strong>
@@ -2427,9 +2449,10 @@ export default function App() {
                   </thead>
                   <tbody>
                     {managerRows.map((row) => {
-                      const isEditing = managerEditingClientUuid === row.client_uuid;
+                      const rowClientUuid = row.client_uuid || row.CLIENT_UUID || '';
+                      const isEditing = managerEditingClientUuid === rowClientUuid;
                       return (
-                        <tr key={row.client_uuid}>
+                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
                           <td data-label="Operador">
                             <strong>{row.operador || '-'}</strong>
                             <span>{row.synced_em ? new Date(row.synced_em).toLocaleString('pt-BR') : ''}</span>
@@ -2499,10 +2522,10 @@ export default function App() {
                             <div className="manager-table-actions">
                               {isEditing ? (
                                 <>
-                                  <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(row.client_uuid)} disabled={managerRowActionId === row.client_uuid}>
+                                  <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(rowClientUuid)} disabled={managerRowActionId === rowClientUuid}>
                                     Salvar
                                   </button>
-                                  <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === row.client_uuid}>
+                                  <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === rowClientUuid}>
                                     Cancelar
                                   </button>
                                 </>
@@ -2511,7 +2534,7 @@ export default function App() {
                                   <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
                                     Editar
                                   </button>
-                                  <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === row.client_uuid}>
+                                  <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === rowClientUuid || !rowClientUuid}>
                                     Excluir
                                   </button>
                                 </>
@@ -2527,7 +2550,7 @@ export default function App() {
             )}
           </section>
 
-          <section className="panel manager-panel">
+          <section className="panel manager-panel manager-users-panel">
             <div className="panel-header">
               <span className="panel-step">Acessos</span>
               <strong>Cadastrar novo usuário</strong>
