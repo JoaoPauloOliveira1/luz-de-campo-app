@@ -1357,6 +1357,7 @@ export default function App() {
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
   const [managerTableMaximized, setManagerTableMaximized] = useState(false);
+  const [managerUsersCollapsed, setManagerUsersCollapsed] = useState(true);
   const [managerRowActionId, setManagerRowActionId] = useState('');
   const [managerUserForm, setManagerUserForm] = useState({
     managerAccessCode: '',
@@ -2863,7 +2864,22 @@ export default function App() {
               </button>
             </form>
 
-            <div className="manager-user-list">
+            <div className="manager-user-list-header">
+              <div>
+                <strong>Usuarios liberados</strong>
+                <span>{allowedOperators.length} acesso(s) ativo(s)</span>
+              </div>
+              <button
+                type="button"
+                className="manager-user-collapse"
+                onClick={() => setManagerUsersCollapsed((current) => !current)}
+              >
+                {managerUsersCollapsed ? 'Mostrar' : 'Ocultar'}
+              </button>
+            </div>
+
+            {!managerUsersCollapsed && (
+              <div className="manager-user-list">
               {allowedOperators.map((operator) => (
                 <article key={operator.id} className="manager-user-card">
                   <div className="manager-user-card-copy">
@@ -2886,7 +2902,8 @@ export default function App() {
                   </div>
                 </article>
               ))}
-            </div>
+              </div>
+            )}
           </section>
         </main>
 

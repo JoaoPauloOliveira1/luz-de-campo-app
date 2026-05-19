@@ -215,6 +215,44 @@ select {
   gap: 10px;
 }
 
+.manager-user-list-header {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(11, 47, 109, 0.1);
+  border-radius: 16px;
+  background: rgba(246, 249, 254, 0.86);
+}
+
+.manager-user-list-header div {
+  display: grid;
+  gap: 2px;
+}
+
+.manager-user-list-header strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.manager-user-list-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manager-user-collapse {
+  border: 1px solid rgba(11, 47, 109, 0.14);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
 .manager-user-card {
   display: flex;
   align-items: center;
