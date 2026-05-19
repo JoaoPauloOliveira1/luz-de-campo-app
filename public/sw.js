@@ -1,4 +1,4 @@
-const SHELL_CACHE_NAME = 'luz-de-campo-shell-v2';
+const SHELL_CACHE_NAME = 'luz-de-campo-shell-v4';
 const TILE_CACHE_NAME = 'luz-de-campo-tiles-v1';
 const RUNTIME_CACHE_NAME = 'luz-de-campo-runtime-v1';
 const OFFLINE_TILE_URL = '/offline-tile.svg';
@@ -44,6 +44,27 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
+    const isNavigationRequest = request.mode === 'navigate'
+      || (request.headers.get('accept') || '').includes('text/html');
+
+    if (isNavigationRequest || url.pathname.startsWith('/assets/')) {
+      event.respondWith(
+        fetch(request)
+          .then((response) => {
+            if (!response || response.status !== 200) return response;
+            const cloned = response.clone();
+            caches.open(SHELL_CACHE_NAME).then((cache) => cache.put(request, cloned));
+            return response;
+          })
+          .catch(async () => {
+            const cached = await caches.match(request);
+            if (cached) return cached;
+            return caches.match('/index.html');
+          })
+      );
+      return;
+    }
+
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached;
