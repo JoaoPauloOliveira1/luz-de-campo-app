@@ -652,6 +652,11 @@ select {
   cursor: pointer;
 }
 
+.image-upload-action.is-guided,
+.save-action.is-guided {
+  animation: guidedFieldPulse 1.05s ease-in-out 2;
+}
+
 .image-upload-input {
   display: none;
 }
@@ -771,6 +776,13 @@ select {
 .form-field.is-filled select {
   border-color: rgba(22, 163, 74, 0.78);
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.08);
+}
+
+.form-field.is-guided input,
+.form-field.is-guided select {
+  animation: guidedFieldPulse 1.05s ease-in-out 2;
+  border-color: rgba(24, 67, 143, 0.78);
+  background: rgba(255, 255, 255, 0.98);
 }
 
 .form-field input:focus {
@@ -1201,6 +1213,21 @@ select {
       0 0 0 0 rgba(24, 67, 143, 0),
       0 18px 28px rgba(11, 47, 109, 0.24),
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+}
+
+@keyframes guidedFieldPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px rgba(24, 67, 143, 0.10),
+      0 12px 22px rgba(13, 32, 65, 0.05);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(24, 67, 143, 0.24),
+      0 16px 28px rgba(13, 32, 65, 0.14);
   }
 }
 

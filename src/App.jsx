@@ -1189,6 +1189,7 @@ export default function App() {
   const [managerUserLoading, setManagerUserLoading] = useState(false);
   const [managerUserActionId, setManagerUserActionId] = useState(null);
   const [autofocusRequestId, setAutofocusRequestId] = useState(0);
+  const [guidedFieldKey, setGuidedFieldKey] = useState('');
 
   const canConfirmLocation = useMemo(
     () => Number.isFinite(draftPosition?.lat) && Number.isFinite(draftPosition?.lng),
@@ -1267,26 +1268,15 @@ export default function App() {
     setAutofocusRequestId((current) => current + 1);
   }, []);
 
-  const focusElementByKey = useCallback((focusKey) => {
+  const guideElementByKey = useCallback((focusKey) => {
     const nextElement = formFieldRefs.current[focusKey];
     if (nextElement) {
-      nextElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-      nextElement.focus();
-      if (typeof nextElement.select === 'function') {
-        nextElement.select();
-      }
+      setGuidedFieldKey(focusKey);
       return true;
     }
 
     if (saveActionRef.current) {
-      saveActionRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-      saveActionRef.current.focus();
+      setGuidedFieldKey('SAVE_ACTION');
       return true;
     }
 
@@ -1296,8 +1286,8 @@ export default function App() {
   const focusFirstPendingFormField = useCallback(() => {
     const currentForm = formStateRef.current;
     const nextPendingField = buildFormFocusSequence(currentForm).find((focusKey) => !isFocusKeyFilled(currentForm, focusKey));
-    focusElementByKey(nextPendingField || 'SAVE_ACTION');
-  }, [focusElementByKey]);
+    guideElementByKey(nextPendingField || 'SAVE_ACTION');
+  }, [guideElementByKey]);
 
   const focusNextFormField = useCallback((currentKey) => {
     const currentForm = formStateRef.current;
@@ -1306,12 +1296,22 @@ export default function App() {
     const nextPendingField = focusSequence.find(
       (focusKey, index) => index > currentIndex && !isFocusKeyFilled(currentForm, focusKey)
     );
-    focusElementByKey(nextPendingField || 'SAVE_ACTION');
-  }, [focusElementByKey]);
+    guideElementByKey(nextPendingField || 'SAVE_ACTION');
+  }, [guideElementByKey]);
 
   useEffect(() => {
     formStateRef.current = form;
   }, [form]);
+
+  useEffect(() => {
+    if (!guidedFieldKey) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setGuidedFieldKey('');
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [guidedFieldKey]);
 
   useEffect(() => {
     if (!activeOperator) return;
@@ -1485,7 +1485,7 @@ export default function App() {
 
   useEffect(() => {
     if (step !== 'form' || !formSectionRef.current) return;
-    formSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setGuidedFieldKey('');
   }, [step, confirmedPosition]);
 
   useEffect(() => {
@@ -2750,7 +2750,7 @@ export default function App() {
                 return (
                   <label
                     key={field}
-                    className={`form-field${field === 'ENDERECO' ? ' full' : ''}${hasValue ? ' is-filled' : ' is-empty'}`}
+                    className={`form-field${field === 'ENDERECO' ? ' full' : ''}${hasValue ? ' is-filled' : ' is-empty'}${guidedFieldKey === field ? ' is-guided' : ''}`}
                   >
                     <span>
                       {FIELD_LABELS[field]}
@@ -2807,7 +2807,7 @@ export default function App() {
                         <strong>Potência e foto</strong>
                         <small>Preencha a potência e adicione a foto desta luminária.</small>
                       </div>
-                      <label className={`form-field full${hasPotencia ? ' is-filled' : ' is-empty'}`}>
+                      <label className={`form-field full${hasPotencia ? ' is-filled' : ' is-empty'}${guidedFieldKey === `LUMINARIA_${item.INDICE}_POTENCIA` ? ' is-guided' : ''}`}>
                         <span>Potência da luminária {item.INDICE}</span>
                         <input
                           ref={(element) => {
@@ -2854,7 +2854,7 @@ export default function App() {
                             }
                           }}
                           type="button"
-                          className="image-upload-action"
+                          className={`image-upload-action${guidedFieldKey === `LUMINARIA_${item.INDICE}_IMAGEM` ? ' is-guided' : ''}`}
                           onClick={() => luminaireFileInputRefs.current[item.INDICE]?.click()}
                         >
                           {item.IMAGEM ? 'Trocar foto' : 'Adicionar foto'}
@@ -2879,7 +2879,7 @@ export default function App() {
                 })}
               </div>
 
-              <button ref={saveActionRef} className="save-action" type="button" onClick={handleSaveEntry}>
+              <button ref={saveActionRef} className={`save-action${guidedFieldKey === 'SAVE_ACTION' ? ' is-guided' : ''}`} type="button" onClick={handleSaveEntry}>
                 {editingEntryId ? 'Atualizar registro local' : 'Adicionar registro'}
               </button>
             </div>
