@@ -925,18 +925,17 @@ select {
 
 .manager-submission-table {
   width: 100%;
-  min-width: 4200px;
+  min-width: 1480px;
   border-collapse: collapse;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .manager-submission-table th,
 .manager-submission-table td {
-  padding: 8px;
+  padding: 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
-  min-width: 112px;
 }
 
 .manager-submission-table th {
@@ -954,17 +953,24 @@ select {
   overflow-wrap: anywhere;
 }
 
-.manager-table-field-endereco,
-.manager-table-field-links_imagens {
-  min-width: 240px;
+.manager-submission-table th:nth-child(1),
+.manager-submission-table td:nth-child(1) {
+  width: 190px;
 }
 
-.manager-table-field-latitude,
-.manager-table-field-longitude,
-.manager-table-field-rpa,
-.manager-table-field-qtde,
-.manager-table-field-tem_imagem {
-  min-width: 88px;
+.manager-submission-table th:nth-child(2),
+.manager-submission-table td:nth-child(2) {
+  width: 380px;
+}
+
+.manager-submission-table th:nth-child(3),
+.manager-submission-table td:nth-child(3) {
+  width: 430px;
+}
+
+.manager-submission-table th:nth-child(4),
+.manager-submission-table td:nth-child(4) {
+  width: 360px;
 }
 
 .manager-table-links {
@@ -1009,6 +1015,50 @@ select {
   margin-top: 4px;
   color: var(--muted);
   font-size: 10px;
+}
+
+.manager-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.manager-table-summary-cell .manager-detail-grid {
+  grid-template-columns: 1fr;
+}
+
+.manager-detail-item {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(143, 158, 184, 0.2);
+  border-radius: 12px;
+  background: rgba(246, 249, 254, 0.74);
+}
+
+.manager-detail-label {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.manager-detail-value {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.manager-submission-table td .manager-detail-label {
+  margin: 0 0 4px;
+  font-size: 8px;
+}
+
+.manager-submission-table td .manager-detail-value span {
+  margin-top: 0;
 }
 
 .manager-table-edit-grid {
@@ -1639,6 +1689,10 @@ select {
   }
 
   .manager-table-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-detail-grid {
     grid-template-columns: 1fr;
   }
 

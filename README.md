@@ -21,7 +21,7 @@ Abra:
 Crie um arquivo `.env` local seguindo `.env.example`:
 
 ```env
-VITE_FIELD_API_BASE_URL=https://luz-de-campo.onrender.com
+VITE_FIELD_API_BASE_URL=https://cadastroeditor-api.onrender.com
 ```
 
 No Render, configure a mesma variável no Static Site.
@@ -32,7 +32,7 @@ Use este projeto como um Static Site separado.
 
 - Build Command: `npm ci && npm run build`
 - Publish Directory: `dist`
-- Environment Variable: `VITE_FIELD_API_BASE_URL=https://luz-de-campo.onrender.com`
+- Environment Variable: `VITE_FIELD_API_BASE_URL=https://cadastroeditor-api.onrender.com`
 
 Se usar o `render.yaml`, o Render já terá esses valores como base.
 

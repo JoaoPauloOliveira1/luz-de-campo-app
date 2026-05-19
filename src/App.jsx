@@ -46,7 +46,57 @@ const EXPORT_FIELDS = [
   'EXPORTED_EM',
 ];
 
-const MANAGER_TABLE_FIELDS = EXPORT_FIELDS;
+const MANAGER_SUMMARY_FIELDS = [
+  'OPERADOR',
+  'IMPLANTACAO_CONCLUIDA',
+  'SYNCED_EM',
+  'EXPORTED_EM',
+];
+
+const MANAGER_LOCATION_FIELDS = [
+  'RPA',
+  'LOCALIZACA',
+  'ENDERECO',
+  'BARRAMENTO',
+  'LATITUDE',
+  'LONGITUDE',
+  'BAIRRO',
+  'MEDICAO',
+  'ID_CADASTRO',
+];
+
+const MANAGER_INSTALLATION_FIELDS = [
+  'TIPO_IMPLANTACAO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
+  'TIPO_LUMIN',
+  'TIPO_DE_PO',
+  'TIPO_LAMPA',
+  'QTDE',
+  'POTENCIA',
+  'PERDAS',
+  'TOTAL_CARGA',
+  'CONSUMO_kW',
+  'CONSUMO_kW_MES',
+  'ATUALIZAÃ‡',
+  'DATA_ATUALIZACAO_DEIL',
+  'BLOQ_AMP',
+];
+
+const MANAGER_LUMINAIRE_FIELDS = [
+  'POTENCIA_LUMINARIA_1',
+  'POTENCIA_LUMINARIA_2',
+  'POTENCIA_LUMINARIA_3',
+  'POTENCIA_LUMINARIA_4',
+  'POTENCIA_LUMINARIA_5',
+  'TEM_IMAGEM',
+  'LINKS_IMAGENS',
+  'LINK_IMAGEM_1',
+  'LINK_IMAGEM_2',
+  'LINK_IMAGEM_3',
+  'LINK_IMAGEM_4',
+  'LINK_IMAGEM_5',
+];
 
 const MANAGER_EDITABLE_FIELDS = new Set([
   'RPA',
@@ -164,7 +214,27 @@ const QUEUE_STORAGE_KEY = 'luz-de-campo-queue';
 const LOCATION_CONTEXT_CACHE_KEY = 'luz-de-campo-location-context';
 const OFFLINE_ACCESS_STORAGE_KEY = 'luz-de-campo-offline-access';
 const OPERATORS_CACHE_STORAGE_KEY = 'luz-de-campo-operators-cache';
-const FIELD_API_BASE_URL = (import.meta.env.VITE_FIELD_API_BASE_URL || 'http://127.0.0.1:8010').replace(/\/$/, '');
+const PRODUCTION_FIELD_API_BASE_URL = 'https://cadastroeditor-api.onrender.com';
+
+function resolveFieldApiBaseUrl(rawUrl) {
+  const cleanedUrl = (rawUrl || 'http://127.0.0.1:8010').replace(/\/$/, '');
+
+  if (typeof window === 'undefined') {
+    return cleanedUrl;
+  }
+
+  const isProductionFrontend = window.location.hostname === 'luz-de-campo-frontend.onrender.com';
+  const isLegacyBackendUrl = cleanedUrl === 'https://luz-de-campo.onrender.com';
+  const isLocalBackendUrl = isLocalApiBaseUrl(cleanedUrl);
+
+  if (isProductionFrontend && (isLegacyBackendUrl || isLocalBackendUrl)) {
+    return PRODUCTION_FIELD_API_BASE_URL;
+  }
+
+  return cleanedUrl;
+}
+
+const FIELD_API_BASE_URL = resolveFieldApiBaseUrl(import.meta.env.VITE_FIELD_API_BASE_URL);
 const MAX_OFFLINE_RPAS = 3;
 const MAP_TILE_URLS = [
   'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
@@ -2176,6 +2246,19 @@ export default function App() {
     return formattedValue;
   }, [handleManagerEditFieldChange, managerEditDraft]);
 
+  const renderManagerDetailGroup = useCallback((fields, exportRow, isEditing) => (
+    <div className="manager-detail-grid">
+      {fields.map((field) => (
+        <div key={field} className="manager-detail-item">
+          <span className="manager-detail-label">{MANAGER_FIELD_LABELS[field] || field}</span>
+          <div className="manager-detail-value">
+            {renderManagerTableCell(field, exportRow, isEditing)}
+          </div>
+        </div>
+      ))}
+    </div>
+  ), [renderManagerTableCell]);
+
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
     if (!activeOperator?.can_export) return;
@@ -2611,9 +2694,10 @@ export default function App() {
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
-                      {MANAGER_TABLE_FIELDS.map((field) => (
-                        <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
-                      ))}
+                      <th>Resumo</th>
+                      <th>Local</th>
+                      <th>Implantacao</th>
+                      <th>Luminarias e fotos</th>
                       <th className="manager-table-actions-col">Ações</th>
                     </tr>
                   </thead>
@@ -2624,11 +2708,18 @@ export default function App() {
                       const exportRow = buildExportRow(row);
                       return (
                         <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
-                          {MANAGER_TABLE_FIELDS.map((field) => (
-                            <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field} className={`manager-table-field manager-table-field-${field.toLowerCase()}`}>
-                              {renderManagerTableCell(field, exportRow, isEditing)}
-                            </td>
-                          ))}
+                          <td data-label="Resumo" className="manager-table-summary-cell">
+                            {renderManagerDetailGroup(MANAGER_SUMMARY_FIELDS, exportRow, isEditing)}
+                          </td>
+                          <td data-label="Local">
+                            {renderManagerDetailGroup(MANAGER_LOCATION_FIELDS, exportRow, isEditing)}
+                          </td>
+                          <td data-label="Implantacao">
+                            {renderManagerDetailGroup(MANAGER_INSTALLATION_FIELDS, exportRow, isEditing)}
+                          </td>
+                          <td data-label="Luminarias e fotos">
+                            {renderManagerDetailGroup(MANAGER_LUMINAIRE_FIELDS, exportRow, isEditing)}
+                          </td>
                           <td data-label="Ações" className="manager-table-actions-cell">
                             <div className="manager-table-actions">
                               {isEditing ? (
