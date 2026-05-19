@@ -1129,16 +1129,28 @@ async function deleteFieldSubmission(clientUuid, payload) {
     throw new Error('Não foi possível identificar este ponto para exclusão.');
   }
 
-  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/delete`, {
+  const deletePayload = {
+    ...payload,
+    client_uuid: normalizedClientUuid,
+  };
+
+  let response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/delete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      ...payload,
-      client_uuid: normalizedClientUuid,
-    }),
+    body: JSON.stringify(deletePayload),
   });
+
+  if (response.status === 404) {
+    response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(normalizedClientUuid)}/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
 
   if (!response.ok) {
     throw new Error(await readApiError(response, 'Não foi possível excluir o ponto.'));
@@ -2354,7 +2366,7 @@ export default function App() {
 
   if (activeOperator.can_export) {
     return (
-      <div className="field-app">
+      <div className="field-app manager-app">
         <header className="hero">
           <div className="hero-badge">Luz de Campo</div>
             <h1>Painel gerencial</h1>

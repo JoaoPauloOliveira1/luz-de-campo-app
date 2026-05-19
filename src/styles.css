@@ -39,6 +39,12 @@ select {
   padding: 18px 14px 28px;
 }
 
+.manager-app {
+  min-height: 100vh;
+  padding: 12px 12px 16px;
+  overflow: hidden;
+}
+
 .auth-app {
   display: grid;
   place-items: center;
@@ -652,6 +658,17 @@ select {
   cursor: pointer;
 }
 
+.manager-app .hero {
+  margin-bottom: 10px;
+  padding: 16px 18px;
+  border-radius: 22px;
+}
+
+.manager-app .hero h1 {
+  margin: 8px 0 6px;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
 .image-upload-action.is-guided,
 .save-action.is-guided {
   animation: guidedFieldPulse 1.05s ease-in-out 2;
@@ -831,7 +848,7 @@ select {
   max-width: 1180px;
   margin: 0 auto;
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 
 .manager-layout .manager-panel {
@@ -843,14 +860,14 @@ select {
 .manager-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 8px;
 }
 
 .manager-stat-card {
   display: grid;
-  gap: 6px;
-  padding: 20px;
-  border-radius: 26px;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 18px;
   background:
     linear-gradient(145deg, rgba(248, 250, 254, 0.98), rgba(231, 238, 250, 0.86));
   border: 1px solid var(--line);
@@ -858,7 +875,7 @@ select {
 }
 
 .manager-stat-card strong {
-  font-size: 38px;
+  font-size: 28px;
   line-height: 1;
   color: var(--blue);
 }
@@ -866,22 +883,25 @@ select {
 .manager-stat-card span {
   color: var(--muted);
   font-weight: 600;
+  font-size: 12px;
 }
 
 .manager-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: 18px;
+  margin-top: 10px;
 }
 
 .manager-refresh {
   display: flex;
   justify-content: center;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 .manager-table-panel {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(65, 105, 171, 0.11), transparent 32%),
@@ -893,7 +913,10 @@ select {
 }
 
 .manager-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 26px;
   background: rgba(255, 255, 255, 0.94);
@@ -909,7 +932,7 @@ select {
 
 .manager-submission-table th,
 .manager-submission-table td {
-  padding: 14px;
+  padding: 8px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
@@ -917,7 +940,7 @@ select {
 
 .manager-submission-table th {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: rgba(245, 248, 253, 0.92);
@@ -925,7 +948,7 @@ select {
 
 .manager-submission-table td {
   color: var(--text);
-  font-size: 14px;
+  font-size: 11px;
   background: rgba(255, 255, 255, 0.68);
   overflow-wrap: anywhere;
 }
@@ -938,7 +961,7 @@ select {
   display: block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .manager-table-edit-grid {
@@ -958,15 +981,15 @@ select {
 
 .manager-table-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 5px;
 }
 
 .manager-table-button {
-  min-height: 38px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 13px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  font-size: 11px;
   width: 100%;
 }
 
@@ -1300,7 +1323,9 @@ select {
 
   .manager-layout {
     grid-template-columns: minmax(320px, 0.86fr) minmax(620px, 1.14fr);
+    grid-template-rows: auto 1fr;
     align-items: start;
+    height: calc(100vh - 132px);
   }
 
   .manager-summary-panel {
@@ -1310,14 +1335,20 @@ select {
   .manager-table-panel {
     grid-column: 2;
     grid-row: 1 / span 2;
+    height: 100%;
+  }
+
+  .manager-table-panel .panel-header {
+    margin-bottom: 8px;
   }
 
   .manager-users-panel {
     grid-column: 1;
+    align-self: start;
   }
 
   .manager-summary-panel .manager-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .manager-summary-panel .manager-actions,
@@ -1329,6 +1360,34 @@ select {
   .manager-summary-panel .ghost-action,
   .manager-summary-panel .shortcut-action {
     width: 100%;
+  }
+
+  .manager-users-panel {
+    padding: 12px;
+  }
+
+  .manager-users-panel .panel-header {
+    margin-bottom: 8px;
+  }
+
+  .manager-user-form {
+    gap: 8px;
+  }
+
+  .manager-user-form .form-field input {
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .manager-user-toggle {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .manager-user-list {
+    max-height: 150px;
+    overflow: auto;
   }
 
   .panel-location {
