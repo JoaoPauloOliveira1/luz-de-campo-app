@@ -854,6 +854,83 @@ select {
   margin-top: 14px;
 }
 
+.manager-table-panel {
+  overflow: hidden;
+}
+
+.manager-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.manager-submission-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+}
+
+.manager-submission-table th,
+.manager-submission-table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.manager-submission-table th {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.manager-submission-table td {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.manager-submission-table td span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manager-table-edit-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.manager-submission-table input,
+.manager-submission-table select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 11px;
+  color: var(--text);
+  background: white;
+}
+
+.manager-table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-table-button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.manager-table-delete {
+  border-color: rgba(190, 18, 60, 0.18);
+  color: #be123c;
+}
+
 .queue-toolbar {
   display: flex;
   align-items: flex-start;

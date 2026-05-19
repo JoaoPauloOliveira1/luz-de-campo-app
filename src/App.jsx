@@ -27,6 +27,8 @@ const EXPORT_FIELDS = [
   'OPERADOR',
   'ID_CADASTRO',
   'TIPO_IMPLANTACAO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
   'IMPLANTACAO_CONCLUIDA',
   'POTENCIA_LUMINARIA_1',
   'POTENCIA_LUMINARIA_2',
@@ -48,6 +50,8 @@ const INITIAL_FORM = {
   OPERADOR: '',
   ID_CADASTRO: '',
   TIPO_IMPLANTACAO: '',
+  MOTIVO_IMPLANTACAO: '',
+  OBRA_NOME: '',
   IMPLANTACAO_CONCLUIDA: '',
   IMAGEM: null,
   RPA: '',
@@ -77,6 +81,8 @@ const FIELD_LABELS = {
   OPERADOR: 'Operador',
   ID_CADASTRO: 'ID cadastro',
   TIPO_IMPLANTACAO: 'Situação do poste',
+  MOTIVO_IMPLANTACAO: 'Motivo de implantação',
+  OBRA_NOME: 'Obra',
   IMPLANTACAO_CONCLUIDA: 'Implantação concluída',
   RPA: 'RPA',
   LOCALIZACA: 'Localização',
@@ -105,6 +111,8 @@ const MAX_LUMINARIAS = 5;
 const FIELD_PLACEHOLDERS = {
   ID_CADASTRO: 'Opcional, se já existir no cadastro',
   TIPO_IMPLANTACAO: 'Selecione se é nova implantação ou poste existente',
+  MOTIVO_IMPLANTACAO: 'Selecione o motivo',
+  OBRA_NOME: 'Selecione ou informe a obra',
   IMPLANTACAO_CONCLUIDA: 'Marque se a implantação foi concluída',
   RPA: 'Preenchido automaticamente quando possível',
   LOCALIZACA: 'Selecione o tipo de localização',
@@ -135,18 +143,22 @@ const MAP_TILE_URLS = [
 
 const QUICK_OPTIONS = {
   TIPO_IMPLANTACAO: ['NOVA IMPLANTAÇÃO', 'POSTE EXISTENTE'],
+  MOTIVO_IMPLANTACAO: ['OBRA', 'EXPANSÃO'],
+  OBRA_NOME: ['PEDONAL CAXANGÁ', 'PEDONAL ZONA OESTE'],
   IMPLANTACAO_CONCLUIDA: ['SIM', 'NÃO'],
   LOCALIZACA: ['RUA', 'PRAÇA', 'AVENIDA', 'OUTRO'],
   BARRAMENTO: ['S/N'],
   MEDICAO: ['SIM', 'NÃO'],
   TIPO_LUMIN: ['FECHADA', 'ORNAMENTAL', 'REFLETOR'],
-  TIPO_DE_PO: ['CONCRETO', 'METÁLICO', 'FIBRA'],
+  TIPO_DE_PO: ['CONCRETO', 'METÁLICO', 'FIBRA', 'GIRAFA'],
   TIPO_LAMPA: ['LED', 'V. SÓDIO', { label: 'METAL', value: 'V. METÁLICO' }, 'HALÓGENA'],
   QTDE: ['1', '2', '3', '4', '5'],
 };
 
 const FAST_COPY_FIELDS = [
   'TIPO_IMPLANTACAO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
   'RPA',
   'LOCALIZACA',
   'BAIRRO',
@@ -164,6 +176,8 @@ const FAST_COPY_FIELDS = [
 
 const FORM_FIELDS = [
   'TIPO_IMPLANTACAO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
   'IMPLANTACAO_CONCLUIDA',
   'RPA',
   'LOCALIZACA',
@@ -332,6 +346,8 @@ function buildExportRow(row) {
     OPERADOR: row?.OPERADOR ?? row?.operador ?? '',
     ID_CADASTRO: row?.ID_CADASTRO ?? row?.id_cadastro ?? '',
     TIPO_IMPLANTACAO: row?.TIPO_IMPLANTACAO ?? row?.tipo_implantacao ?? '',
+    MOTIVO_IMPLANTACAO: row?.MOTIVO_IMPLANTACAO ?? row?.motivo_implantacao ?? '',
+    OBRA_NOME: row?.OBRA_NOME ?? row?.obra_nome ?? '',
     IMPLANTACAO_CONCLUIDA: row?.IMPLANTACAO_CONCLUIDA ?? row?.implantacao_concluida ?? '',
     TEM_IMAGEM: row?.TEM_IMAGEM ?? (row?.tem_imagem ? 'SIM' : countLuminaireImages(luminarias) > 0 ? 'SIM' : 'NÃO'),
     LINKS_IMAGENS: row?.LINKS_IMAGENS ?? (imageLinks.length ? imageLinks.join('\n') : ''),
@@ -361,7 +377,10 @@ function isEntryReadyToSync(entry) {
 }
 
 function buildFormFocusSequence(currentForm) {
-  const baseFields = FORM_FIELDS.filter((field) => !['QTDE', 'LATITUDE', 'LONGITUDE'].includes(field));
+  const baseFields = FORM_FIELDS.filter((field) => (
+    !['QTDE', 'LATITUDE', 'LONGITUDE'].includes(field)
+    && (field !== 'OBRA_NOME' || currentForm?.MOTIVO_IMPLANTACAO === 'OBRA')
+  ));
   const luminariaFields = (currentForm?.LUMINARIAS || []).flatMap((item, index) => [
     `LUMINARIA_${item?.INDICE || index + 1}_POTENCIA`,
     `LUMINARIA_${item?.INDICE || index + 1}_IMAGEM`,
@@ -409,6 +428,7 @@ function buildNextPointForm(baseForm, operatorName) {
       IMAGEM: null,
     })),
     IMAGEM: null,
+    OBRA_NOME: baseForm?.MOTIVO_IMPLANTACAO === 'OBRA' ? baseForm?.OBRA_NOME || '' : '',
     IMPLANTACAO_CONCLUIDA: '',
     ATUALIZACAO: new Date().toISOString().slice(0, 10),
   };
@@ -1087,6 +1107,38 @@ async function markSubmissionsExported(clientUuids, exportedByOperatorId) {
   return response.json();
 }
 
+async function updateFieldSubmission(clientUuid, payload) {
+  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(clientUuid)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Não foi possível editar o ponto.'));
+  }
+
+  return response.json();
+}
+
+async function deleteFieldSubmission(clientUuid, payload) {
+  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(clientUuid)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Não foi possível excluir o ponto.'));
+  }
+
+  return response.json();
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const formSectionRef = useRef(null);
@@ -1123,6 +1175,11 @@ export default function App() {
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [managerSummary, setManagerSummary] = useState({ total: 0, pending_export: 0, exported: 0 });
   const [managerLoading, setManagerLoading] = useState(false);
+  const [managerRows, setManagerRows] = useState([]);
+  const [managerRowsLoading, setManagerRowsLoading] = useState(false);
+  const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
+  const [managerEditDraft, setManagerEditDraft] = useState({});
+  const [managerRowActionId, setManagerRowActionId] = useState('');
   const [managerUserForm, setManagerUserForm] = useState({
     managerAccessCode: '',
     name: '',
@@ -1192,7 +1249,7 @@ export default function App() {
   }, [operatorEntries, queueFilter]);
   const requiredFieldsFilled = useMemo(
     () => {
-      const baseFields = FORM_FIELDS.filter((field) => !['QTDE', 'LATITUDE', 'LONGITUDE'].includes(field));
+      const baseFields = buildFormFocusSequence(form).filter((field) => !field.startsWith('LUMINARIA_'));
       const baseFilled = baseFields.filter((field) => String(form[field] ?? '').trim()).length;
       const luminariasFilled = (form.LUMINARIAS || []).reduce((total, item) => {
         const hasPotencia = String(item?.POTENCIA ?? '').trim().length > 0;
@@ -1584,7 +1641,11 @@ export default function App() {
       }));
       return;
     }
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === 'MOTIVO_IMPLANTACAO' && value !== 'OBRA' ? { OBRA_NOME: '' } : {}),
+    }));
   }, []);
 
   const handleLuminairePotenciaChange = useCallback((index, value) => {
@@ -1748,6 +1809,8 @@ export default function App() {
         OPERADOR: entry.OPERADOR,
         ID_CADASTRO: entry.ID_CADASTRO,
         TIPO_IMPLANTACAO: entry.TIPO_IMPLANTACAO,
+        MOTIVO_IMPLANTACAO: entry.MOTIVO_IMPLANTACAO,
+        OBRA_NOME: entry.MOTIVO_IMPLANTACAO === 'OBRA' ? entry.OBRA_NOME : '',
         IMPLANTACAO_CONCLUIDA: entry.IMPLANTACAO_CONCLUIDA,
         RPA: entry.RPA,
         LOCALIZACA: entry.LOCALIZACA,
@@ -1821,10 +1884,103 @@ export default function App() {
     }
   }, [activeOperator, setToast]);
 
+  const loadManagerRows = useCallback(async () => {
+    if (!activeOperator?.can_export) return;
+    setManagerRowsLoading(true);
+    try {
+      const rows = await fetchSubmissionExport('all');
+      setManagerRows(rows);
+    } catch (error) {
+      setToast(error.message || 'Não foi possível carregar os pontos registrados.');
+    } finally {
+      setManagerRowsLoading(false);
+    }
+  }, [activeOperator, setToast]);
+
   useEffect(() => {
     if (!activeOperator?.can_export) return;
     loadManagerSummary();
-  }, [activeOperator, loadManagerSummary]);
+    loadManagerRows();
+  }, [activeOperator, loadManagerSummary, loadManagerRows]);
+
+  const handleStartManagerEdit = useCallback((row) => {
+    setManagerEditingClientUuid(row.client_uuid);
+    setManagerEditDraft({
+      RPA: row.rpa || '',
+      ENDERECO: row.endereco || '',
+      BAIRRO: row.bairro || '',
+      TIPO_IMPLANTACAO: row.tipo_implantacao || '',
+      MOTIVO_IMPLANTACAO: row.motivo_implantacao || '',
+      OBRA_NOME: row.obra_nome || '',
+      IMPLANTACAO_CONCLUIDA: row.implantacao_concluida || '',
+      TIPO_DE_PO: row.tipo_de_po || '',
+    });
+  }, []);
+
+  const handleManagerEditFieldChange = useCallback((field, value) => {
+    setManagerEditDraft((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === 'MOTIVO_IMPLANTACAO' && value !== 'OBRA' ? { OBRA_NOME: '' } : {}),
+    }));
+  }, []);
+
+  const handleSaveManagerEdit = useCallback(async (clientUuid) => {
+    if (!activeOperator?.can_export) return;
+    if (!managerUserForm.managerAccessCode.trim()) {
+      setToast('Informe o código gerencial antes de editar pontos.');
+      return;
+    }
+    try {
+      setManagerRowActionId(clientUuid);
+      await updateFieldSubmission(clientUuid, {
+        manager_operator_id: activeOperator.id,
+        manager_access_code: managerUserForm.managerAccessCode.trim(),
+        RPA: managerEditDraft.RPA,
+        ENDERECO: managerEditDraft.ENDERECO,
+        BAIRRO: managerEditDraft.BAIRRO,
+        TIPO_IMPLANTACAO: managerEditDraft.TIPO_IMPLANTACAO,
+        MOTIVO_IMPLANTACAO: managerEditDraft.MOTIVO_IMPLANTACAO,
+        OBRA_NOME: managerEditDraft.MOTIVO_IMPLANTACAO === 'OBRA' ? managerEditDraft.OBRA_NOME : '',
+        IMPLANTACAO_CONCLUIDA: managerEditDraft.IMPLANTACAO_CONCLUIDA,
+        TIPO_DE_PO: managerEditDraft.TIPO_DE_PO,
+      });
+      setManagerEditingClientUuid('');
+      setManagerEditDraft({});
+      await loadManagerRows();
+      await loadManagerSummary();
+      setToast('Ponto atualizado.');
+    } catch (error) {
+      setToast(error.message || 'Não foi possível editar o ponto.');
+    } finally {
+      setManagerRowActionId('');
+    }
+  }, [activeOperator, loadManagerRows, loadManagerSummary, managerEditDraft, managerUserForm.managerAccessCode]);
+
+  const handleDeleteManagerRow = useCallback(async (row) => {
+    if (!activeOperator?.can_export) return;
+    if (!managerUserForm.managerAccessCode.trim()) {
+      setToast('Informe o código gerencial antes de excluir pontos.');
+      return;
+    }
+    const confirmed = window.confirm(`Excluir o ponto registrado por ${row.operador || 'campo'}?`);
+    if (!confirmed) return;
+
+    try {
+      setManagerRowActionId(row.client_uuid);
+      await deleteFieldSubmission(row.client_uuid, {
+        manager_operator_id: activeOperator.id,
+        manager_access_code: managerUserForm.managerAccessCode.trim(),
+      });
+      await loadManagerRows();
+      await loadManagerSummary();
+      setToast('Ponto excluído.');
+    } catch (error) {
+      setToast(error.message || 'Não foi possível excluir o ponto.');
+    } finally {
+      setManagerRowActionId('');
+    }
+  }, [activeOperator, loadManagerRows, loadManagerSummary, managerUserForm.managerAccessCode]);
 
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
@@ -1893,7 +2049,11 @@ export default function App() {
       return;
     }
 
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === 'MOTIVO_IMPLANTACAO' && value !== 'OBRA' ? { OBRA_NOME: '' } : {}),
+    }));
     window.setTimeout(() => focusNextFormField(field), 0);
   }, [focusNextFormField]);
 
@@ -2230,12 +2390,141 @@ export default function App() {
               <button
                 type="button"
                 className="shortcut-action shortcut-action-light"
-                onClick={loadManagerSummary}
+                onClick={() => {
+                  loadManagerSummary();
+                  loadManagerRows();
+                }}
                 disabled={managerLoading}
               >
                 Atualizar contadores
               </button>
             </div>
+          </section>
+
+          <section className="panel manager-panel manager-table-panel">
+            <div className="panel-header">
+              <span className="panel-step">Registros</span>
+              <strong>Pontos registrados</strong>
+              <small>Revise, edite ou exclua os pontos sincronizados antes de usar no Cadastro Editor.</small>
+            </div>
+
+            {managerRowsLoading ? (
+              <div className="placeholder-card">Carregando pontos registrados...</div>
+            ) : managerRows.length === 0 ? (
+              <div className="placeholder-card">Nenhum ponto registrado no banco.</div>
+            ) : (
+              <div className="manager-table-scroll">
+                <table className="manager-submission-table">
+                  <thead>
+                    <tr>
+                      <th>Operador</th>
+                      <th>Local</th>
+                      <th>Motivo</th>
+                      <th>Poste</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {managerRows.map((row) => {
+                      const isEditing = managerEditingClientUuid === row.client_uuid;
+                      return (
+                        <tr key={row.client_uuid}>
+                          <td>
+                            <strong>{row.operador || '-'}</strong>
+                            <span>{row.synced_em ? new Date(row.synced_em).toLocaleString('pt-BR') : ''}</span>
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <div className="manager-table-edit-grid">
+                                <input value={managerEditDraft.ENDERECO || ''} placeholder="Endereço" onChange={(event) => handleManagerEditFieldChange('ENDERECO', event.target.value)} />
+                                <input value={managerEditDraft.BAIRRO || ''} placeholder="Bairro" onChange={(event) => handleManagerEditFieldChange('BAIRRO', event.target.value)} />
+                                <input value={managerEditDraft.RPA || ''} placeholder="RPA" onChange={(event) => handleManagerEditFieldChange('RPA', event.target.value)} />
+                              </div>
+                            ) : (
+                              <>
+                                <strong>{row.endereco || 'Sem endereço'}</strong>
+                                <span>{row.bairro || 'Sem bairro'} · RPA {row.rpa || '-'}</span>
+                              </>
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <div className="manager-table-edit-grid">
+                                <select value={managerEditDraft.MOTIVO_IMPLANTACAO || ''} onChange={(event) => handleManagerEditFieldChange('MOTIVO_IMPLANTACAO', event.target.value)}>
+                                  <option value="">Motivo</option>
+                                  <option value="OBRA">OBRA</option>
+                                  <option value="EXPANSÃO">EXPANSÃO</option>
+                                </select>
+                                {managerEditDraft.MOTIVO_IMPLANTACAO === 'OBRA' && (
+                                  <select value={managerEditDraft.OBRA_NOME || ''} onChange={(event) => handleManagerEditFieldChange('OBRA_NOME', event.target.value)}>
+                                    <option value="">Obra</option>
+                                    <option value="PEDONAL CAXANGÁ">PEDONAL CAXANGÁ</option>
+                                    <option value="PEDONAL ZONA OESTE">PEDONAL ZONA OESTE</option>
+                                  </select>
+                                )}
+                              </div>
+                            ) : (
+                              <>
+                                <strong>{row.motivo_implantacao || '-'}</strong>
+                                <span>{row.obra_nome || ''}</span>
+                              </>
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <select value={managerEditDraft.TIPO_DE_PO || ''} onChange={(event) => handleManagerEditFieldChange('TIPO_DE_PO', event.target.value)}>
+                                <option value="">Tipo</option>
+                                <option value="CONCRETO">CONCRETO</option>
+                                <option value="METÁLICO">METÁLICO</option>
+                                <option value="FIBRA">FIBRA</option>
+                                <option value="GIRAFA">GIRAFA</option>
+                              </select>
+                            ) : (
+                              row.tipo_de_po || '-'
+                            )}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <select value={managerEditDraft.IMPLANTACAO_CONCLUIDA || ''} onChange={(event) => handleManagerEditFieldChange('IMPLANTACAO_CONCLUIDA', event.target.value)}>
+                                <option value="">Status</option>
+                                <option value="SIM">SIM</option>
+                                <option value="NÃO">NÃO</option>
+                              </select>
+                            ) : (
+                              row.implantacao_concluida === 'SIM' ? 'Concluído' : 'Em aberto'
+                            )}
+                          </td>
+                          <td>
+                            <div className="manager-table-actions">
+                              {isEditing ? (
+                                <>
+                                  <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(row.client_uuid)} disabled={managerRowActionId === row.client_uuid}>
+                                    Salvar
+                                  </button>
+                                  <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === row.client_uuid}>
+                                    Cancelar
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
+                                    Editar
+                                  </button>
+                                  <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === row.client_uuid}>
+                                    Excluir
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="panel manager-panel">
@@ -2446,6 +2735,9 @@ export default function App() {
                 </div>
 
               {FORM_FIELDS.map((field) => {
+                if (field === 'OBRA_NOME' && form.MOTIVO_IMPLANTACAO !== 'OBRA') {
+                  return null;
+                }
                 const isCoordinates = field === 'LATITUDE' || field === 'LONGITUDE';
                 const isQuantityField = field === 'QTDE';
                 const inputType = ['QTDE', 'PERDAS', 'TOTAL_CARGA', 'CONSUMO_kW', 'CONSUMO_kW_MES'].includes(field)
