@@ -659,6 +659,7 @@ select {
 }
 
 .manager-app .hero {
+  max-width: none;
   margin-bottom: 10px;
   padding: 16px 18px;
   border-radius: 22px;
@@ -840,12 +841,13 @@ select {
 }
 
 .manager-panel {
-  max-width: 1180px;
+  max-width: none;
   margin: 0 auto;
 }
 
 .manager-layout {
-  max-width: 1180px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   display: grid;
   gap: 10px;
@@ -1419,20 +1421,23 @@ select {
   }
 
   .manager-layout {
-    grid-template-columns: minmax(320px, 0.86fr) minmax(620px, 1.14fr);
-    grid-template-rows: auto 1fr;
+    grid-template-columns: minmax(360px, 0.96fr) minmax(420px, 1.04fr);
+    grid-template-rows: auto minmax(0, 1fr);
     align-items: start;
     height: calc(100vh - 132px);
   }
 
   .manager-summary-panel {
     grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
   }
 
   .manager-table-panel {
-    grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-column: 1 / -1;
+    grid-row: 2;
     height: 100%;
+    min-height: 0;
   }
 
   .manager-table-panel .panel-header {
@@ -1440,8 +1445,10 @@ select {
   }
 
   .manager-users-panel {
-    grid-column: 1;
+    grid-column: 2;
+    grid-row: 1;
     align-self: start;
+    min-height: 0;
   }
 
   .manager-summary-panel .manager-stats {
