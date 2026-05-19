@@ -1124,8 +1124,8 @@ async function updateFieldSubmission(clientUuid, payload) {
 }
 
 async function deleteFieldSubmission(clientUuid, payload) {
-  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(clientUuid)}`, {
-    method: 'DELETE',
+  const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(clientUuid)}/delete`, {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -2430,11 +2430,11 @@ export default function App() {
                       const isEditing = managerEditingClientUuid === row.client_uuid;
                       return (
                         <tr key={row.client_uuid}>
-                          <td>
+                          <td data-label="Operador">
                             <strong>{row.operador || '-'}</strong>
                             <span>{row.synced_em ? new Date(row.synced_em).toLocaleString('pt-BR') : ''}</span>
                           </td>
-                          <td>
+                          <td data-label="Local">
                             {isEditing ? (
                               <div className="manager-table-edit-grid">
                                 <input value={managerEditDraft.ENDERECO || ''} placeholder="Endereço" onChange={(event) => handleManagerEditFieldChange('ENDERECO', event.target.value)} />
@@ -2448,7 +2448,7 @@ export default function App() {
                               </>
                             )}
                           </td>
-                          <td>
+                          <td data-label="Motivo">
                             {isEditing ? (
                               <div className="manager-table-edit-grid">
                                 <select value={managerEditDraft.MOTIVO_IMPLANTACAO || ''} onChange={(event) => handleManagerEditFieldChange('MOTIVO_IMPLANTACAO', event.target.value)}>
@@ -2471,7 +2471,7 @@ export default function App() {
                               </>
                             )}
                           </td>
-                          <td>
+                          <td data-label="Poste">
                             {isEditing ? (
                               <select value={managerEditDraft.TIPO_DE_PO || ''} onChange={(event) => handleManagerEditFieldChange('TIPO_DE_PO', event.target.value)}>
                                 <option value="">Tipo</option>
@@ -2484,7 +2484,7 @@ export default function App() {
                               row.tipo_de_po || '-'
                             )}
                           </td>
-                          <td>
+                          <td data-label="Status">
                             {isEditing ? (
                               <select value={managerEditDraft.IMPLANTACAO_CONCLUIDA || ''} onChange={(event) => handleManagerEditFieldChange('IMPLANTACAO_CONCLUIDA', event.target.value)}>
                                 <option value="">Status</option>
@@ -2495,7 +2495,7 @@ export default function App() {
                               row.implantacao_concluida === 'SIM' ? 'Concluído' : 'Em aberto'
                             )}
                           </td>
-                          <td>
+                          <td data-label="Ações">
                             <div className="manager-table-actions">
                               {isEditing ? (
                                 <>
