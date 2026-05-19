@@ -925,9 +925,9 @@ select {
 
 .manager-submission-table {
   width: 100%;
-  min-width: 100%;
+  min-width: 4200px;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .manager-submission-table th,
@@ -936,6 +936,7 @@ select {
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
+  min-width: 112px;
 }
 
 .manager-submission-table th {
@@ -951,6 +952,52 @@ select {
   font-size: 11px;
   background: rgba(255, 255, 255, 0.68);
   overflow-wrap: anywhere;
+}
+
+.manager-table-field-endereco,
+.manager-table-field-links_imagens {
+  min-width: 240px;
+}
+
+.manager-table-field-latitude,
+.manager-table-field-longitude,
+.manager-table-field-rpa,
+.manager-table-field-qtde,
+.manager-table-field-tem_imagem {
+  min-width: 88px;
+}
+
+.manager-table-links {
+  display: grid;
+  gap: 4px;
+}
+
+.manager-table-links a {
+  color: var(--blue);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.manager-table-links a:hover {
+  text-decoration: underline;
+}
+
+.manager-table-empty {
+  color: var(--muted);
+}
+
+.manager-table-actions-col,
+.manager-table-actions-cell {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-width: 110px;
+  background: rgba(248, 250, 254, 0.98);
+  box-shadow: -10px 0 18px rgba(13, 32, 65, 0.06);
+}
+
+.manager-submission-table th.manager-table-actions-col {
+  z-index: 3;
 }
 
 .manager-submission-table tbody tr:hover td {
@@ -1593,6 +1640,13 @@ select {
 
   .manager-table-actions {
     grid-template-columns: 1fr;
+  }
+
+  .manager-table-actions-col,
+  .manager-table-actions-cell {
+    position: static;
+    min-width: 0;
+    box-shadow: none;
   }
 
   .ghost-action,

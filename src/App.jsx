@@ -46,6 +46,18 @@ const EXPORT_FIELDS = [
   'EXPORTED_EM',
 ];
 
+const MANAGER_TABLE_FIELDS = EXPORT_FIELDS;
+
+const MANAGER_EDITABLE_FIELDS = new Set([
+  'RPA',
+  'ENDERECO',
+  'BAIRRO',
+  'MOTIVO_IMPLANTACAO',
+  'OBRA_NOME',
+  'TIPO_DE_PO',
+  'IMPLANTACAO_CONCLUIDA',
+]);
+
 const INITIAL_FORM = {
   OPERADOR: '',
   ID_CADASTRO: '',
@@ -103,6 +115,26 @@ const FIELD_LABELS = {
   CONSUMO_kW_MES: 'Consumo (kW/mês)',
   ATUALIZACAO: 'Atualização em campo',
   BLOQ_AMP: 'Bloq/Amp',
+};
+
+const MANAGER_FIELD_LABELS = {
+  ...FIELD_LABELS,
+  'ATUALIZAÃ‡': 'Atualização',
+  DATA_ATUALIZACAO_DEIL: 'Atualização DEIL',
+  TEM_IMAGEM: 'Tem imagem',
+  LINKS_IMAGENS: 'Links imagens',
+  LINK_IMAGEM_1: 'Imagem 1',
+  LINK_IMAGEM_2: 'Imagem 2',
+  LINK_IMAGEM_3: 'Imagem 3',
+  LINK_IMAGEM_4: 'Imagem 4',
+  LINK_IMAGEM_5: 'Imagem 5',
+  POTENCIA_LUMINARIA_1: 'Pot. lum. 1',
+  POTENCIA_LUMINARIA_2: 'Pot. lum. 2',
+  POTENCIA_LUMINARIA_3: 'Pot. lum. 3',
+  POTENCIA_LUMINARIA_4: 'Pot. lum. 4',
+  POTENCIA_LUMINARIA_5: 'Pot. lum. 5',
+  SYNCED_EM: 'Sincronizado em',
+  EXPORTED_EM: 'Exportado em',
 };
 
 const MAX_IMAGE_SIZE_BYTES = 850 * 1024;
@@ -366,6 +398,26 @@ function buildExportRow(row) {
   }
 
   return exportRow;
+}
+
+function formatManagerCellValue(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'number') return String(value);
+  const text = String(value).trim();
+  if (!text) return '-';
+
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleString('pt-BR');
+    }
+  }
+
+  return text;
+}
+
+function isManagerImageLinkField(field) {
+  return field === 'LINKS_IMAGENS' || field.startsWith('LINK_IMAGEM_');
 }
 
 function isEntryReadyToSync(entry) {
@@ -1145,6 +1197,26 @@ async function deleteFieldSubmission(clientUuid, payload) {
   if (response.status === 404) {
     response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(normalizedClientUuid)}/delete`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  if (response.status === 404) {
+    response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/delete/${encodeURIComponent(normalizedClientUuid)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  if (response.status === 404) {
+    response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/${encodeURIComponent(normalizedClientUuid)}`, {
+      method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -2016,6 +2088,94 @@ export default function App() {
     }
   }, [activeOperator, loadManagerRows, loadManagerSummary, managerUserForm.managerAccessCode]);
 
+  const renderManagerTableCell = useCallback((field, exportRow, isEditing) => {
+    const value = exportRow[field];
+
+    if (isEditing && MANAGER_EDITABLE_FIELDS.has(field)) {
+      if (field === 'MOTIVO_IMPLANTACAO') {
+        return (
+          <select value={managerEditDraft.MOTIVO_IMPLANTACAO || ''} onChange={(event) => handleManagerEditFieldChange('MOTIVO_IMPLANTACAO', event.target.value)}>
+            <option value="">Motivo</option>
+            <option value="OBRA">OBRA</option>
+            <option value="EXPANSÃO">EXPANSÃO</option>
+          </select>
+        );
+      }
+
+      if (field === 'OBRA_NOME') {
+        return (
+          <select
+            value={managerEditDraft.OBRA_NOME || ''}
+            onChange={(event) => handleManagerEditFieldChange('OBRA_NOME', event.target.value)}
+            disabled={managerEditDraft.MOTIVO_IMPLANTACAO !== 'OBRA'}
+          >
+            <option value="">Obra</option>
+            <option value="PEDONAL CAXANGÁ">PEDONAL CAXANGÁ</option>
+            <option value="PEDONAL ZONA OESTE">PEDONAL ZONA OESTE</option>
+          </select>
+        );
+      }
+
+      if (field === 'TIPO_DE_PO') {
+        return (
+          <select value={managerEditDraft.TIPO_DE_PO || ''} onChange={(event) => handleManagerEditFieldChange('TIPO_DE_PO', event.target.value)}>
+            <option value="">Tipo</option>
+            <option value="CONCRETO">CONCRETO</option>
+            <option value="METÁLICO">METÁLICO</option>
+            <option value="FIBRA">FIBRA</option>
+            <option value="GIRAFA">GIRAFA</option>
+          </select>
+        );
+      }
+
+      if (field === 'IMPLANTACAO_CONCLUIDA') {
+        return (
+          <select value={managerEditDraft.IMPLANTACAO_CONCLUIDA || ''} onChange={(event) => handleManagerEditFieldChange('IMPLANTACAO_CONCLUIDA', event.target.value)}>
+            <option value="">Status</option>
+            <option value="SIM">SIM</option>
+            <option value="NÃO">NÃO</option>
+          </select>
+        );
+      }
+
+      return (
+        <input
+          value={managerEditDraft[field] || ''}
+          placeholder={MANAGER_FIELD_LABELS[field] || field}
+          onChange={(event) => handleManagerEditFieldChange(field, event.target.value)}
+        />
+      );
+    }
+
+    const formattedValue = formatManagerCellValue(value);
+    if (formattedValue === '-') {
+      return <span className="manager-table-empty">-</span>;
+    }
+
+    if (isManagerImageLinkField(field)) {
+      const links = String(value)
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (!links.length) {
+        return <span className="manager-table-empty">-</span>;
+      }
+
+      return (
+        <div className="manager-table-links">
+          {links.map((link, index) => (
+            <a key={`${field}-${link}`} href={link} target="_blank" rel="noreferrer">
+              {links.length > 1 ? `Imagem ${index + 1}` : 'Abrir imagem'}
+            </a>
+          ))}
+        </div>
+      );
+    }
+
+    return formattedValue;
+  }, [handleManagerEditFieldChange, managerEditDraft]);
+
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
     if (!activeOperator?.can_export) return;
@@ -2451,86 +2611,25 @@ export default function App() {
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
-                      <th>Operador</th>
-                      <th>Local</th>
-                      <th>Motivo</th>
-                      <th>Poste</th>
-                      <th>Status</th>
-                      <th>Ações</th>
+                      {MANAGER_TABLE_FIELDS.map((field) => (
+                        <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
+                      ))}
+                      <th className="manager-table-actions-col">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {managerRows.map((row) => {
                       const rowClientUuid = row.client_uuid || row.CLIENT_UUID || '';
                       const isEditing = managerEditingClientUuid === rowClientUuid;
+                      const exportRow = buildExportRow(row);
                       return (
                         <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
-                          <td data-label="Operador">
-                            <strong>{row.operador || '-'}</strong>
-                            <span>{row.synced_em ? new Date(row.synced_em).toLocaleString('pt-BR') : ''}</span>
-                          </td>
-                          <td data-label="Local">
-                            {isEditing ? (
-                              <div className="manager-table-edit-grid">
-                                <input value={managerEditDraft.ENDERECO || ''} placeholder="Endereço" onChange={(event) => handleManagerEditFieldChange('ENDERECO', event.target.value)} />
-                                <input value={managerEditDraft.BAIRRO || ''} placeholder="Bairro" onChange={(event) => handleManagerEditFieldChange('BAIRRO', event.target.value)} />
-                                <input value={managerEditDraft.RPA || ''} placeholder="RPA" onChange={(event) => handleManagerEditFieldChange('RPA', event.target.value)} />
-                              </div>
-                            ) : (
-                              <>
-                                <strong>{row.endereco || 'Sem endereço'}</strong>
-                                <span>{row.bairro || 'Sem bairro'} · RPA {row.rpa || '-'}</span>
-                              </>
-                            )}
-                          </td>
-                          <td data-label="Motivo">
-                            {isEditing ? (
-                              <div className="manager-table-edit-grid">
-                                <select value={managerEditDraft.MOTIVO_IMPLANTACAO || ''} onChange={(event) => handleManagerEditFieldChange('MOTIVO_IMPLANTACAO', event.target.value)}>
-                                  <option value="">Motivo</option>
-                                  <option value="OBRA">OBRA</option>
-                                  <option value="EXPANSÃO">EXPANSÃO</option>
-                                </select>
-                                {managerEditDraft.MOTIVO_IMPLANTACAO === 'OBRA' && (
-                                  <select value={managerEditDraft.OBRA_NOME || ''} onChange={(event) => handleManagerEditFieldChange('OBRA_NOME', event.target.value)}>
-                                    <option value="">Obra</option>
-                                    <option value="PEDONAL CAXANGÁ">PEDONAL CAXANGÁ</option>
-                                    <option value="PEDONAL ZONA OESTE">PEDONAL ZONA OESTE</option>
-                                  </select>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                <strong>{row.motivo_implantacao || '-'}</strong>
-                                <span>{row.obra_nome || ''}</span>
-                              </>
-                            )}
-                          </td>
-                          <td data-label="Poste">
-                            {isEditing ? (
-                              <select value={managerEditDraft.TIPO_DE_PO || ''} onChange={(event) => handleManagerEditFieldChange('TIPO_DE_PO', event.target.value)}>
-                                <option value="">Tipo</option>
-                                <option value="CONCRETO">CONCRETO</option>
-                                <option value="METÁLICO">METÁLICO</option>
-                                <option value="FIBRA">FIBRA</option>
-                                <option value="GIRAFA">GIRAFA</option>
-                              </select>
-                            ) : (
-                              row.tipo_de_po || '-'
-                            )}
-                          </td>
-                          <td data-label="Status">
-                            {isEditing ? (
-                              <select value={managerEditDraft.IMPLANTACAO_CONCLUIDA || ''} onChange={(event) => handleManagerEditFieldChange('IMPLANTACAO_CONCLUIDA', event.target.value)}>
-                                <option value="">Status</option>
-                                <option value="SIM">SIM</option>
-                                <option value="NÃO">NÃO</option>
-                              </select>
-                            ) : (
-                              row.implantacao_concluida === 'SIM' ? 'Concluído' : 'Em aberto'
-                            )}
-                          </td>
-                          <td data-label="Ações">
+                          {MANAGER_TABLE_FIELDS.map((field) => (
+                            <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field} className={`manager-table-field manager-table-field-${field.toLowerCase()}`}>
+                              {renderManagerTableCell(field, exportRow, isEditing)}
+                            </td>
+                          ))}
+                          <td data-label="Ações" className="manager-table-actions-cell">
                             <div className="manager-table-actions">
                               {isEditing ? (
                                 <>
