@@ -504,6 +504,147 @@ function isManagerImageLinkField(field) {
   return field === 'LINKS_IMAGENS' || field.startsWith('LINK_IMAGEM_');
 }
 
+function getManagerRowId(row) {
+  return row?.client_uuid || row?.CLIENT_UUID || '';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getExportRowImageLinks(exportRow) {
+  const links = [
+    exportRow?.LINKS_IMAGENS,
+    exportRow?.LINK_IMAGEM_1,
+    exportRow?.LINK_IMAGEM_2,
+    exportRow?.LINK_IMAGEM_3,
+    exportRow?.LINK_IMAGEM_4,
+    exportRow?.LINK_IMAGEM_5,
+  ]
+    .flatMap((value) => String(value || '').split('\n'))
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return links.filter((link, index) => links.indexOf(link) === index);
+}
+
+function buildManagerPdfReportHtml(items, generatedAt) {
+  const cards = items.map(({ exportRow }, index) => {
+    const imageLinks = getExportRowImageLinks(exportRow);
+    const primaryImage = imageLinks[0] || '';
+    const details = EXPORT_FIELDS
+      .filter((field) => !isManagerImageLinkField(field))
+      .map((field) => [MANAGER_FIELD_LABELS[field] || field, formatManagerCellValue(exportRow[field])])
+      .filter(([, value]) => value !== '-');
+    const title = exportRow.ENDERECO || exportRow.BAIRRO || `Ponto ${index + 1}`;
+    const coordinates = `${formatManagerCellValue(exportRow.LATITUDE)}, ${formatManagerCellValue(exportRow.LONGITUDE)}`;
+    const gallery = imageLinks.slice(1).map((link, imageIndex) => `
+      <figure class="gallery-item">
+        <img src="${escapeHtml(link)}" alt="Foto complementar ${imageIndex + 2} do ponto ${index + 1}">
+        <figcaption>Foto ${imageIndex + 2}</figcaption>
+      </figure>
+    `).join('');
+
+    return `
+      <article class="point-card">
+        <header class="point-header">
+          <div>
+            <span>Registro ${index + 1}</span>
+            <h2>${escapeHtml(title)}</h2>
+            <p>${escapeHtml(exportRow.BAIRRO || 'Bairro nao informado')} | RPA ${escapeHtml(exportRow.RPA || '-')}</p>
+          </div>
+          <strong>${escapeHtml(coordinates)}</strong>
+        </header>
+
+        <div class="point-body">
+          <figure class="point-photo">
+            ${primaryImage
+              ? `<img src="${escapeHtml(primaryImage)}" alt="Foto principal do ponto ${index + 1}">`
+              : '<div class="photo-placeholder">Sem foto anexada</div>'}
+            <figcaption>Foto principal do ponto</figcaption>
+          </figure>
+
+          <dl class="point-details">
+            ${details.map(([label, value]) => `
+              <div>
+                <dt>${escapeHtml(label)}</dt>
+                <dd>${escapeHtml(value)}</dd>
+              </div>
+            `).join('')}
+          </dl>
+        </div>
+
+        ${gallery ? `<div class="photo-gallery">${gallery}</div>` : ''}
+      </article>
+    `;
+  }).join('');
+
+  return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>Relatorio de pontos - Luz de Campo</title>
+    <style>
+      @page { size: A4; margin: 14mm; }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: #14213d; font-family: Arial, Helvetica, sans-serif; background: #f5f7fb; }
+      .report-cover { margin-bottom: 18px; padding: 18px 20px; border-radius: 16px; color: white; background: linear-gradient(135deg, #0b2f6d, #18438f); }
+      .report-cover span { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+      h1 { margin: 0 0 8px; font-size: 26px; }
+      .report-cover p { margin: 0; opacity: 0.9; line-height: 1.45; }
+      .point-card { break-inside: avoid; page-break-inside: avoid; margin: 0 0 16px; padding: 16px; border: 1px solid #d8e0ef; border-radius: 16px; background: white; }
+      .point-header { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid #e4e9f3; }
+      .point-header span { display: block; margin-bottom: 4px; color: #18438f; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+      h2 { margin: 0 0 4px; font-size: 18px; }
+      .point-header p { margin: 0; color: #5f6f8c; font-size: 12px; }
+      .point-header strong { white-space: nowrap; color: #0b2f6d; font-size: 13px; }
+      .point-body { display: grid; grid-template-columns: 190px 1fr; gap: 14px; margin-top: 14px; }
+      .point-photo, .gallery-item { margin: 0; }
+      .point-photo img, .photo-placeholder { width: 100%; height: 190px; border-radius: 12px; object-fit: cover; border: 1px solid #d8e0ef; background: #eef3fb; }
+      .photo-placeholder { display: grid; place-items: center; color: #6d7a93; font-size: 13px; font-weight: 700; text-align: center; }
+      figcaption { margin-top: 6px; color: #6d7a93; font-size: 11px; }
+      .point-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+      .point-details div { padding: 8px 10px; border-radius: 10px; background: #f5f7fb; border: 1px solid #e4e9f3; }
+      dt { color: #6d7a93; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      dd { margin: 3px 0 0; color: #14213d; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+      .photo-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+      .gallery-item img { width: 100%; height: 110px; border-radius: 10px; object-fit: cover; border: 1px solid #d8e0ef; }
+      @media print { body { background: white; } .point-card { box-shadow: none; } }
+    </style>
+  </head>
+  <body>
+    <section class="report-cover">
+      <span>Luz de Campo</span>
+      <h1>Relatorio de pontos selecionados</h1>
+      <p>${items.length} ponto(s) | Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR'))}</p>
+    </section>
+    ${cards}
+    <script>
+      window.addEventListener('load', () => {
+        window.setTimeout(() => window.print(), 600);
+      });
+    </script>
+  </body>
+</html>`;
+}
+
+function openManagerPdfReport(items) {
+  const reportWindow = window.open('', '_blank');
+  if (!reportWindow) {
+    throw new Error('O navegador bloqueou a janela do relatorio. Libere pop-ups para gerar o PDF.');
+  }
+
+  reportWindow.document.open();
+  reportWindow.document.write(buildManagerPdfReportHtml(items, new Date()));
+  reportWindow.document.close();
+  reportWindow.focus();
+}
+
 function isEntryReadyToSync(entry) {
   return (
     Number.isFinite(toNumber(entry?.LATITUDE))
@@ -1353,6 +1494,7 @@ export default function App() {
   const [managerLoading, setManagerLoading] = useState(false);
   const [managerRows, setManagerRows] = useState([]);
   const [managerRowsLoading, setManagerRowsLoading] = useState(false);
+  const [selectedManagerRowIds, setSelectedManagerRowIds] = useState([]);
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
@@ -2073,6 +2215,10 @@ export default function App() {
     try {
       const rows = await fetchSubmissionExport('all');
       setManagerRows(rows);
+      setSelectedManagerRowIds((current) => {
+        const availableIds = new Set(rows.map(getManagerRowId));
+        return current.filter((id) => availableIds.has(id));
+      });
     } catch (error) {
       setToast(error.message || 'Não foi possível carregar os pontos registrados.');
     } finally {
@@ -2292,6 +2438,16 @@ export default function App() {
       if (!filter) return true;
       return formatManagerCellValue(exportRow[field]).toLowerCase().includes(filter);
     })), [managerRows, managerTableFilters]);
+
+  const selectedManagerIdSet = useMemo(
+    () => new Set(selectedManagerRowIds),
+    [selectedManagerRowIds]
+  );
+  const selectedManagerRows = useMemo(
+    () => managerTableRows.filter(({ clientUuid }) => selectedManagerIdSet.has(clientUuid)),
+    [managerTableRows, selectedManagerIdSet]
+  );
+  const allManagerRowsSelected = managerTableRows.length > 0 && selectedManagerRows.length === managerTableRows.length;
 
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
@@ -2548,6 +2704,38 @@ export default function App() {
     }
   }, [activeOperator, loadManagerSummary]);
 
+  const handleToggleManagerRowSelection = useCallback((rowId) => {
+    if (!rowId) return;
+    setSelectedManagerRowIds((current) => (
+      current.includes(rowId)
+        ? current.filter((id) => id !== rowId)
+        : [...current, rowId]
+    ));
+  }, []);
+
+  const handleToggleAllManagerRowsSelection = useCallback(() => {
+    setSelectedManagerRowIds((current) => {
+      if (managerTableRows.length > 0 && selectedManagerRows.length === managerTableRows.length) {
+        return [];
+      }
+      return managerTableRows.map(({ clientUuid }) => clientUuid).filter(Boolean);
+    });
+  }, [managerTableRows, selectedManagerRows.length]);
+
+  const handleGenerateManagerPdf = useCallback(() => {
+    if (!selectedManagerRows.length) {
+      setToast('Selecione pelo menos um ponto na tabela para gerar o PDF.');
+      return;
+    }
+
+    try {
+      openManagerPdfReport(selectedManagerRows);
+      setToast('Relatorio aberto. Na janela de impressao, escolha Salvar como PDF.');
+    } catch (error) {
+      setToast(error.message || 'Nao foi possivel gerar o relatorio em PDF.');
+    }
+  }, [selectedManagerRows]);
+
   const handleSyncSingleEntry = useCallback(async (entry) => {
     if (!isEntryReadyToSync(entry)) {
       setToast('Confirme o local e marque implantação concluída = SIM antes de enviar.');
@@ -2717,15 +2905,25 @@ export default function App() {
               <div>
                 <span className="panel-step">Registros</span>
                 <strong>Pontos registrados</strong>
-                <small>{managerTableRows.length} linha(s) no recorte ativo</small>
+                <small>{managerTableRows.length} linha(s) no recorte ativo · {selectedManagerRows.length} selecionado(s)</small>
               </div>
-              <button
-                type="button"
-                className="manager-maximize-button"
-                onClick={() => setManagerTableMaximized((current) => !current)}
-              >
-                {managerTableMaximized ? 'Voltar' : 'Maximizar'}
-              </button>
+              <div className="manager-table-header-actions">
+                <button
+                  type="button"
+                  className="primary-action manager-pdf-button"
+                  onClick={handleGenerateManagerPdf}
+                  disabled={!selectedManagerRows.length}
+                >
+                  Gerar PDF ({selectedManagerRows.length})
+                </button>
+                <button
+                  type="button"
+                  className="manager-maximize-button"
+                  onClick={() => setManagerTableMaximized((current) => !current)}
+                >
+                  {managerTableMaximized ? 'Voltar' : 'Maximizar'}
+                </button>
+              </div>
             </div>
 
             {managerRowsLoading ? (
@@ -2737,6 +2935,14 @@ export default function App() {
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
+                      <th className="manager-table-select-col">
+                        <input
+                          type="checkbox"
+                          checked={allManagerRowsSelected}
+                          onChange={handleToggleAllManagerRowsSelection}
+                          aria-label="Selecionar todos os pontos do recorte"
+                        />
+                      </th>
                       <th>Item</th>
                       {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                         <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
@@ -2745,6 +2951,7 @@ export default function App() {
                       <th className="manager-table-actions-col">Ações</th>
                     </tr>
                     <tr className="manager-table-filter-row">
+                      <th />
                       <th />
                       {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                         <th key={`filter-${field}`}>
@@ -2763,8 +2970,18 @@ export default function App() {
                     {managerTableRows.map(({ row, exportRow, clientUuid, index }) => {
                       const rowClientUuid = clientUuid;
                       const isEditing = managerEditingClientUuid === rowClientUuid;
+                      const isSelected = selectedManagerIdSet.has(rowClientUuid);
                       return (
-                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
+                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`} className={isSelected ? 'is-selected' : ''}>
+                          <td data-label="PDF" className="manager-table-select-cell">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
+                              disabled={!rowClientUuid}
+                              aria-label={`Selecionar ponto ${index + 1} para PDF`}
+                            />
+                          </td>
                           <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
                           {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                             <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field}>
