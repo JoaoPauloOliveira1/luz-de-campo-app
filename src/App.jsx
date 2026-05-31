@@ -508,15 +508,6 @@ function getManagerRowId(row) {
   return row?.client_uuid || row?.CLIENT_UUID || '';
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 function getExportRowImageLinks(exportRow) {
   const links = [
     exportRow?.LINKS_IMAGENS,
@@ -533,116 +524,246 @@ function getExportRowImageLinks(exportRow) {
   return links.filter((link, index) => links.indexOf(link) === index);
 }
 
-function buildManagerPdfReportHtml(items, generatedAt) {
-  const cards = items.map(({ exportRow }, index) => {
-    const imageLinks = getExportRowImageLinks(exportRow);
-    const primaryImage = imageLinks[0] || '';
-    const details = EXPORT_FIELDS
-      .filter((field) => !isManagerImageLinkField(field))
-      .map((field) => [MANAGER_FIELD_LABELS[field] || field, formatManagerCellValue(exportRow[field])])
-      .filter(([, value]) => value !== '-');
-    const title = exportRow.ENDERECO || exportRow.BAIRRO || `Ponto ${index + 1}`;
-    const coordinates = `${formatManagerCellValue(exportRow.LATITUDE)}, ${formatManagerCellValue(exportRow.LONGITUDE)}`;
-    const gallery = imageLinks.slice(1).map((link, imageIndex) => `
-      <figure class="gallery-item">
-        <img src="${escapeHtml(link)}" alt="Foto complementar ${imageIndex + 2} do ponto ${index + 1}">
-        <figcaption>Foto ${imageIndex + 2}</figcaption>
-      </figure>
-    `).join('');
-
-    return `
-      <article class="point-card">
-        <header class="point-header">
-          <div>
-            <span>Registro ${index + 1}</span>
-            <h2>${escapeHtml(title)}</h2>
-            <p>${escapeHtml(exportRow.BAIRRO || 'Bairro nao informado')} | RPA ${escapeHtml(exportRow.RPA || '-')}</p>
-          </div>
-          <strong>${escapeHtml(coordinates)}</strong>
-        </header>
-
-        <div class="point-body">
-          <figure class="point-photo">
-            ${primaryImage
-              ? `<img src="${escapeHtml(primaryImage)}" alt="Foto principal do ponto ${index + 1}">`
-              : '<div class="photo-placeholder">Sem foto anexada</div>'}
-            <figcaption>Foto principal do ponto</figcaption>
-          </figure>
-
-          <dl class="point-details">
-            ${details.map(([label, value]) => `
-              <div>
-                <dt>${escapeHtml(label)}</dt>
-                <dd>${escapeHtml(value)}</dd>
-              </div>
-            `).join('')}
-          </dl>
-        </div>
-
-        ${gallery ? `<div class="photo-gallery">${gallery}</div>` : ''}
-      </article>
-    `;
-  }).join('');
-
-  return `<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="utf-8">
-    <title>Relatorio de pontos - Luz de Campo</title>
-    <style>
-      @page { size: A4; margin: 14mm; }
-      * { box-sizing: border-box; }
-      body { margin: 0; color: #14213d; font-family: Arial, Helvetica, sans-serif; background: #f5f7fb; }
-      .report-cover { margin-bottom: 18px; padding: 18px 20px; border-radius: 16px; color: white; background: linear-gradient(135deg, #0b2f6d, #18438f); }
-      .report-cover span { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-      h1 { margin: 0 0 8px; font-size: 26px; }
-      .report-cover p { margin: 0; opacity: 0.9; line-height: 1.45; }
-      .point-card { break-inside: avoid; page-break-inside: avoid; margin: 0 0 16px; padding: 16px; border: 1px solid #d8e0ef; border-radius: 16px; background: white; }
-      .point-header { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid #e4e9f3; }
-      .point-header span { display: block; margin-bottom: 4px; color: #18438f; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
-      h2 { margin: 0 0 4px; font-size: 18px; }
-      .point-header p { margin: 0; color: #5f6f8c; font-size: 12px; }
-      .point-header strong { white-space: nowrap; color: #0b2f6d; font-size: 13px; }
-      .point-body { display: grid; grid-template-columns: 190px 1fr; gap: 14px; margin-top: 14px; }
-      .point-photo, .gallery-item { margin: 0; }
-      .point-photo img, .photo-placeholder { width: 100%; height: 190px; border-radius: 12px; object-fit: cover; border: 1px solid #d8e0ef; background: #eef3fb; }
-      .photo-placeholder { display: grid; place-items: center; color: #6d7a93; font-size: 13px; font-weight: 700; text-align: center; }
-      figcaption { margin-top: 6px; color: #6d7a93; font-size: 11px; }
-      .point-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
-      .point-details div { padding: 8px 10px; border-radius: 10px; background: #f5f7fb; border: 1px solid #e4e9f3; }
-      dt { color: #6d7a93; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-      dd { margin: 3px 0 0; color: #14213d; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
-      .photo-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
-      .gallery-item img { width: 100%; height: 110px; border-radius: 10px; object-fit: cover; border: 1px solid #d8e0ef; }
-      @media print { body { background: white; } .point-card { box-shadow: none; } }
-    </style>
-  </head>
-  <body>
-    <section class="report-cover">
-      <span>Luz de Campo</span>
-      <h1>Relatorio de pontos selecionados</h1>
-      <p>${items.length} ponto(s) | Gerado em ${escapeHtml(generatedAt.toLocaleString('pt-BR'))}</p>
-    </section>
-    ${cards}
-    <script>
-      window.addEventListener('load', () => {
-        window.setTimeout(() => window.print(), 600);
-      });
-    </script>
-  </body>
-</html>`;
+function blobToPdfDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Nao foi possivel preparar a foto para o PDF.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
-function openManagerPdfReport(items) {
-  const reportWindow = window.open('', '_blank');
-  if (!reportWindow) {
-    throw new Error('O navegador bloqueou a janela do relatorio. Libere pop-ups para gerar o PDF.');
+async function loadPdfImage(link) {
+  if (!link) return null;
+
+  try {
+    const response = await fetch(link, { mode: 'cors' });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const dataUrl = await blobToPdfDataUrl(blob);
+    const mime = (dataUrl.match(/^data:(.*?);base64,/) || [])[1] || blob.type || '';
+
+    return {
+      dataUrl,
+      format: mime.toLowerCase().includes('png') ? 'PNG' : 'JPEG',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function addPdfText(doc, text, x, y, options = {}) {
+  const {
+    maxWidth = 80,
+    lineHeight = 4.6,
+    size = 9,
+    color = [20, 33, 61],
+    style = 'normal',
+  } = options;
+  doc.setFont('helvetica', style);
+  doc.setFontSize(size);
+  doc.setTextColor(...color);
+  const lines = doc.splitTextToSize(String(text || '-'), maxWidth);
+  doc.text(lines, x, y);
+  return y + (lines.length * lineHeight);
+}
+
+function addPdfDetail(doc, label, value, x, y, width) {
+  const displayValue = formatManagerCellValue(value);
+  if (displayValue === '-') return y;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(109, 122, 147);
+  doc.text(String(label).toUpperCase(), x, y);
+
+  return addPdfText(doc, displayValue, x, y + 4, {
+    maxWidth: width,
+    lineHeight: 4.2,
+    size: 8.7,
+  }) + 1.6;
+}
+
+function addPdfPlaceholder(doc, x, y, width, height, text = 'Sem foto anexada') {
+  doc.setFillColor(238, 243, 251);
+  doc.setDrawColor(216, 224, 239);
+  doc.roundedRect(x, y, width, height, 3, 3, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(109, 122, 147);
+  doc.text(text, x + width / 2, y + height / 2, { align: 'center', baseline: 'middle' });
+}
+
+function addPdfImage(doc, image, x, y, width, height) {
+  if (!image) {
+    addPdfPlaceholder(doc, x, y, width, height);
+    return;
   }
 
-  reportWindow.document.open();
-  reportWindow.document.write(buildManagerPdfReportHtml(items, new Date()));
-  reportWindow.document.close();
-  reportWindow.focus();
+  try {
+    doc.addImage(image.dataUrl, image.format, x, y, width, height, undefined, 'FAST');
+  } catch {
+    addPdfPlaceholder(doc, x, y, width, height, 'Foto indisponivel');
+  }
+}
+
+function buildPdfDescription(exportRow) {
+  const address = formatManagerCellValue(exportRow.ENDERECO);
+  const district = formatManagerCellValue(exportRow.BAIRRO);
+  const rpa = formatManagerCellValue(exportRow.RPA);
+  const poleType = formatManagerCellValue(exportRow.TIPO_DE_PO);
+  const reason = formatManagerCellValue(exportRow.MOTIVO_IMPLANTACAO);
+  const status = formatManagerCellValue(exportRow.IMPLANTACAO_CONCLUIDA);
+
+  return [
+    address !== '-' ? address : 'Endereco nao informado',
+    district !== '-' ? `bairro ${district}` : '',
+    rpa !== '-' ? `RPA ${rpa}` : '',
+    poleType !== '-' ? `poste ${poleType}` : '',
+    reason !== '-' ? `motivo ${reason}` : '',
+    status !== '-' ? `implantacao ${status}` : '',
+  ].filter(Boolean).join(' | ');
+}
+
+async function createManagerPdfReport(items) {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  const generatedAt = new Date();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+
+  for (let index = 0; index < items.length; index += 1) {
+    if (index > 0) doc.addPage();
+
+    const { exportRow } = items[index];
+    const imageLinks = getExportRowImageLinks(exportRow);
+    const images = await Promise.all(imageLinks.slice(0, 5).map(loadPdfImage));
+    const title = exportRow.ENDERECO || exportRow.BAIRRO || `Ponto ${index + 1}`;
+    const coordinates = `${formatManagerCellValue(exportRow.LATITUDE)}, ${formatManagerCellValue(exportRow.LONGITUDE)}`;
+
+    doc.setFillColor(11, 47, 109);
+    doc.rect(0, 0, pageWidth, 34, 'F');
+    doc.setFillColor(24, 67, 143);
+    doc.rect(0, 28, pageWidth, 6, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text('LUZ DE CAMPO', margin, 12);
+    doc.setFontSize(18);
+    doc.text('Relatorio de ponto', margin, 23);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Registro ${index + 1} de ${items.length}`, pageWidth - margin, 12, { align: 'right' });
+    doc.text(`Gerado em ${generatedAt.toLocaleString('pt-BR')}`, pageWidth - margin, 23, { align: 'right' });
+
+    let y = 45;
+    doc.setTextColor(20, 33, 61);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(doc.splitTextToSize(title, pageWidth - margin * 2), margin, y);
+    y += 12;
+
+    doc.setFillColor(238, 243, 251);
+    doc.setDrawColor(216, 224, 239);
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 16, 3, 3, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('COORDENADAS', margin + 5, y + 6);
+    doc.setFontSize(11);
+    doc.setTextColor(11, 47, 109);
+    doc.text(coordinates, margin + 5, y + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('STATUS', pageWidth - margin - 56, y + 6);
+    doc.setFontSize(11);
+    doc.setTextColor(11, 47, 109);
+    doc.text(formatManagerCellValue(exportRow.IMPLANTACAO_CONCLUIDA), pageWidth - margin - 56, y + 12);
+    y += 24;
+
+    addPdfImage(doc, images[0], margin, y, 82, 62);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(11, 47, 109);
+    doc.text('Descricao do ponto', margin + 92, y + 3);
+    addPdfText(doc, buildPdfDescription(exportRow), margin + 92, y + 10, {
+      maxWidth: pageWidth - margin * 2 - 92,
+      lineHeight: 5,
+      size: 9.5,
+    });
+    y += 72;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(11, 47, 109);
+    doc.text('Informacoes do cadastro', margin, y);
+    y += 7;
+
+    const detailFields = [
+      ['Operador', exportRow.OPERADOR],
+      ['ID cadastro', exportRow.ID_CADASTRO],
+      ['RPA', exportRow.RPA],
+      ['Bairro', exportRow.BAIRRO],
+      ['Endereco', exportRow.ENDERECO],
+      ['Localizacao', exportRow.LOCALIZACA],
+      ['Tipo de poste', exportRow.TIPO_DE_PO],
+      ['Tipo luminaria', exportRow.TIPO_LUMIN],
+      ['Tipo lampada', exportRow.TIPO_LAMPA],
+      ['Quantidade', exportRow.QTDE],
+      ['Potencia total', exportRow.POTENCIA ? `${exportRow.POTENCIA} W` : ''],
+      ['Motivo', exportRow.MOTIVO_IMPLANTACAO],
+      ['Obra', exportRow.OBRA_NOME],
+      ['Medicao', exportRow.MEDICAO],
+      ['Atualizacao campo', exportRow['ATUALIZAÃ‡']],
+      ['Sincronizado em', exportRow.SYNCED_EM],
+    ];
+    const columnWidth = (pageWidth - margin * 2 - 8) / 2;
+    let leftY = y;
+    let rightY = y;
+    detailFields.forEach(([label, value], fieldIndex) => {
+      if (fieldIndex % 2 === 0) {
+        leftY = addPdfDetail(doc, label, value, margin, leftY, columnWidth);
+      } else {
+        rightY = addPdfDetail(doc, label, value, margin + columnWidth + 8, rightY, columnWidth);
+      }
+    });
+    y = Math.max(leftY, rightY) + 4;
+
+    const extraImages = images.slice(1).filter(Boolean);
+    if (extraImages.length) {
+      if (y > 232) {
+        doc.addPage();
+        y = 18;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(11, 47, 109);
+      doc.text('Fotos complementares', margin, y);
+      y += 6;
+
+      const photoWidth = 42;
+      const photoHeight = 34;
+      extraImages.forEach((image, imageIndex) => {
+        const x = margin + ((imageIndex % 4) * (photoWidth + 6));
+        const imageY = y + (Math.floor(imageIndex / 4) * (photoHeight + 9));
+        addPdfImage(doc, image, x, imageY, photoWidth, photoHeight);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(109, 122, 147);
+        doc.text(`Foto ${imageIndex + 2}`, x, imageY + photoHeight + 4);
+      });
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('Luz de Campo', margin, pageHeight - 8);
+    doc.text(`Pagina ${index + 1}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  }
+
+  doc.save(`relatorio_luz_de_campo_${generatedAt.toISOString().slice(0, 10)}.pdf`);
 }
 
 function isEntryReadyToSync(entry) {
@@ -2722,17 +2843,20 @@ export default function App() {
     });
   }, [managerTableRows, selectedManagerRows.length]);
 
-  const handleGenerateManagerPdf = useCallback(() => {
+  const handleGenerateManagerPdf = useCallback(async () => {
     if (!selectedManagerRows.length) {
       setToast('Selecione pelo menos um ponto na tabela para gerar o PDF.');
       return;
     }
 
     try {
-      openManagerPdfReport(selectedManagerRows);
-      setToast('Relatorio aberto. Na janela de impressao, escolha Salvar como PDF.');
+      setManagerLoading(true);
+      await createManagerPdfReport(selectedManagerRows);
+      setToast(`${selectedManagerRows.length} ponto(s) incluÃ­do(s) no PDF.`);
     } catch (error) {
       setToast(error.message || 'Nao foi possivel gerar o relatorio em PDF.');
+    } finally {
+      setManagerLoading(false);
     }
   }, [selectedManagerRows]);
 
@@ -2912,9 +3036,9 @@ export default function App() {
                   type="button"
                   className="primary-action manager-pdf-button"
                   onClick={handleGenerateManagerPdf}
-                  disabled={!selectedManagerRows.length}
+                  disabled={!selectedManagerRows.length || managerLoading}
                 >
-                  Gerar PDF ({selectedManagerRows.length})
+                  {managerLoading ? 'Gerando PDF...' : `Gerar PDF (${selectedManagerRows.length})`}
                 </button>
                 <button
                   type="button"
