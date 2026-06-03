@@ -1269,6 +1269,27 @@ select {
   gap: 4px;
 }
 
+.manager-table-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-pdf-button {
+  min-height: 34px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.manager-pdf-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .manager-maximize-button {
   border: 1px solid rgba(11, 47, 109, 0.16);
   border-radius: 999px;
@@ -1334,12 +1355,12 @@ select {
 
 .manager-submission-table th:nth-child(1),
 .manager-submission-table td:nth-child(1) {
-  width: 56px;
+  width: 42px;
 }
 
 .manager-submission-table th:nth-child(2),
 .manager-submission-table td:nth-child(2) {
-  width: auto;
+  width: 56px;
 }
 
 .manager-submission-table th:nth-child(3),
@@ -1350,6 +1371,27 @@ select {
 .manager-submission-table th:nth-child(4),
 .manager-submission-table td:nth-child(4) {
   width: auto;
+}
+
+.manager-submission-table th:nth-child(5),
+.manager-submission-table td:nth-child(5) {
+  width: auto;
+}
+
+.manager-table-select-col,
+.manager-table-select-cell {
+  text-align: center;
+}
+
+.manager-table-select-col input,
+.manager-table-select-cell input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--blue);
+}
+
+.manager-submission-table tbody tr.is-selected td {
+  background: rgba(24, 67, 143, 0.08);
 }
 
 .manager-table-filter-row th {
@@ -2117,6 +2159,16 @@ select {
     border-radius: 26px;
   }
 
+  .manager-table-panel .panel-header,
+  .manager-table-header-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .manager-table-header-actions {
+    flex-direction: column;
+  }
+
   .manager-table-scroll {
     overflow-x: visible;
     border: 0;
@@ -2150,6 +2202,13 @@ select {
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: 0 18px 36px rgba(13, 32, 65, 0.08);
+  }
+
+  .manager-submission-table tbody tr.is-selected {
+    border-color: rgba(11, 47, 109, 0.38);
+    box-shadow:
+      inset 4px 0 0 rgba(11, 47, 109, 0.82),
+      0 18px 36px rgba(13, 32, 65, 0.08);
   }
 
   .manager-submission-table td {

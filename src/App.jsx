@@ -578,6 +578,268 @@ function isManagerImageLinkField(field) {
   return field === 'LINKS_IMAGENS' || field.startsWith('LINK_IMAGEM_');
 }
 
+function getManagerRowId(row) {
+  return row?.client_uuid || row?.CLIENT_UUID || '';
+}
+
+function getExportRowImageLinks(exportRow) {
+  const links = [
+    exportRow?.LINKS_IMAGENS,
+    exportRow?.LINK_IMAGEM_1,
+    exportRow?.LINK_IMAGEM_2,
+    exportRow?.LINK_IMAGEM_3,
+    exportRow?.LINK_IMAGEM_4,
+    exportRow?.LINK_IMAGEM_5,
+  ]
+    .flatMap((value) => String(value || '').split('\n'))
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return links.filter((link, index) => links.indexOf(link) === index);
+}
+
+function blobToPdfDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Nao foi possivel preparar a foto para o PDF.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function loadPdfImage(link) {
+  if (!link) return null;
+
+  try {
+    const response = await fetch(link, { mode: 'cors' });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const dataUrl = await blobToPdfDataUrl(blob);
+    const mime = (dataUrl.match(/^data:(.*?);base64,/) || [])[1] || blob.type || '';
+
+    return {
+      dataUrl,
+      format: mime.toLowerCase().includes('png') ? 'PNG' : 'JPEG',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function addPdfText(doc, text, x, y, options = {}) {
+  const {
+    maxWidth = 80,
+    lineHeight = 4.6,
+    size = 9,
+    color = [20, 33, 61],
+    style = 'normal',
+  } = options;
+  doc.setFont('helvetica', style);
+  doc.setFontSize(size);
+  doc.setTextColor(...color);
+  const lines = doc.splitTextToSize(String(text || '-'), maxWidth);
+  doc.text(lines, x, y);
+  return y + (lines.length * lineHeight);
+}
+
+function addPdfDetail(doc, label, value, x, y, width) {
+  const displayValue = formatManagerCellValue(value);
+  if (displayValue === '-') return y;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(109, 122, 147);
+  doc.text(String(label).toUpperCase(), x, y);
+
+  return addPdfText(doc, displayValue, x, y + 4, {
+    maxWidth: width,
+    lineHeight: 4.2,
+    size: 8.7,
+  }) + 1.6;
+}
+
+function addPdfPlaceholder(doc, x, y, width, height, text = 'Sem foto anexada') {
+  doc.setFillColor(238, 243, 251);
+  doc.setDrawColor(216, 224, 239);
+  doc.roundedRect(x, y, width, height, 3, 3, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(109, 122, 147);
+  doc.text(text, x + width / 2, y + height / 2, { align: 'center', baseline: 'middle' });
+}
+
+function addPdfImage(doc, image, x, y, width, height) {
+  if (!image) {
+    addPdfPlaceholder(doc, x, y, width, height);
+    return;
+  }
+
+  try {
+    doc.addImage(image.dataUrl, image.format, x, y, width, height, undefined, 'FAST');
+  } catch {
+    addPdfPlaceholder(doc, x, y, width, height, 'Foto indisponivel');
+  }
+}
+
+function buildPdfDescription(exportRow) {
+  const address = formatManagerCellValue(exportRow.ENDERECO);
+  const district = formatManagerCellValue(exportRow.BAIRRO);
+  const rpa = formatManagerCellValue(exportRow.RPA);
+  const poleType = formatManagerCellValue(exportRow.TIPO_DE_PO);
+  const reason = formatManagerCellValue(exportRow.MOTIVO_IMPLANTACAO);
+  const status = formatManagerCellValue(exportRow.IMPLANTACAO_CONCLUIDA);
+
+  return [
+    address !== '-' ? address : 'Endereco nao informado',
+    district !== '-' ? `bairro ${district}` : '',
+    rpa !== '-' ? `RPA ${rpa}` : '',
+    poleType !== '-' ? `poste ${poleType}` : '',
+    reason !== '-' ? `motivo ${reason}` : '',
+    status !== '-' ? `implantacao ${status}` : '',
+  ].filter(Boolean).join(' | ');
+}
+
+async function createManagerPdfReport(items) {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  const generatedAt = new Date();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+
+  for (let index = 0; index < items.length; index += 1) {
+    if (index > 0) doc.addPage();
+
+    const { exportRow } = items[index];
+    const imageLinks = getExportRowImageLinks(exportRow);
+    const images = await Promise.all(imageLinks.slice(0, 5).map(loadPdfImage));
+    const title = exportRow.ENDERECO || exportRow.BAIRRO || `Ponto ${index + 1}`;
+    const coordinates = `${formatManagerCellValue(exportRow.LATITUDE)}, ${formatManagerCellValue(exportRow.LONGITUDE)}`;
+
+    doc.setFillColor(11, 47, 109);
+    doc.rect(0, 0, pageWidth, 34, 'F');
+    doc.setFillColor(24, 67, 143);
+    doc.rect(0, 28, pageWidth, 6, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text('LUZ DE CAMPO', margin, 12);
+    doc.setFontSize(18);
+    doc.text('Relatorio de ponto', margin, 23);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Registro ${index + 1} de ${items.length}`, pageWidth - margin, 12, { align: 'right' });
+    doc.text(`Gerado em ${generatedAt.toLocaleString('pt-BR')}`, pageWidth - margin, 23, { align: 'right' });
+
+    let y = 45;
+    doc.setTextColor(20, 33, 61);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(doc.splitTextToSize(title, pageWidth - margin * 2), margin, y);
+    y += 12;
+
+    doc.setFillColor(238, 243, 251);
+    doc.setDrawColor(216, 224, 239);
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 16, 3, 3, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('COORDENADAS', margin + 5, y + 6);
+    doc.setFontSize(11);
+    doc.setTextColor(11, 47, 109);
+    doc.text(coordinates, margin + 5, y + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('STATUS', pageWidth - margin - 56, y + 6);
+    doc.setFontSize(11);
+    doc.setTextColor(11, 47, 109);
+    doc.text(formatManagerCellValue(exportRow.IMPLANTACAO_CONCLUIDA), pageWidth - margin - 56, y + 12);
+    y += 24;
+
+    addPdfImage(doc, images[0], margin, y, 82, 62);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(11, 47, 109);
+    doc.text('Descricao do ponto', margin + 92, y + 3);
+    addPdfText(doc, buildPdfDescription(exportRow), margin + 92, y + 10, {
+      maxWidth: pageWidth - margin * 2 - 92,
+      lineHeight: 5,
+      size: 9.5,
+    });
+    y += 72;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(11, 47, 109);
+    doc.text('Informacoes do cadastro', margin, y);
+    y += 7;
+
+    const detailFields = [
+      ['Operador', exportRow.OPERADOR],
+      ['ID cadastro', exportRow.ID_CADASTRO],
+      ['RPA', exportRow.RPA],
+      ['Bairro', exportRow.BAIRRO],
+      ['Endereco', exportRow.ENDERECO],
+      ['Localizacao', exportRow.LOCALIZACA],
+      ['Tipo de poste', exportRow.TIPO_DE_PO],
+      ['Tipo luminaria', exportRow.TIPO_LUMIN],
+      ['Tipo lampada', exportRow.TIPO_LAMPA],
+      ['Quantidade', exportRow.QTDE],
+      ['Potencia total', exportRow.POTENCIA ? `${exportRow.POTENCIA} W` : ''],
+      ['Motivo', exportRow.MOTIVO_IMPLANTACAO],
+      ['Obra', exportRow.OBRA_NOME],
+      ['Medicao', exportRow.MEDICAO],
+      ['Atualizacao campo', exportRow['ATUALIZAÃ‡']],
+      ['Sincronizado em', exportRow.SYNCED_EM],
+    ];
+    const columnWidth = (pageWidth - margin * 2 - 8) / 2;
+    let leftY = y;
+    let rightY = y;
+    detailFields.forEach(([label, value], fieldIndex) => {
+      if (fieldIndex % 2 === 0) {
+        leftY = addPdfDetail(doc, label, value, margin, leftY, columnWidth);
+      } else {
+        rightY = addPdfDetail(doc, label, value, margin + columnWidth + 8, rightY, columnWidth);
+      }
+    });
+    y = Math.max(leftY, rightY) + 4;
+
+    const extraImages = images.slice(1).filter(Boolean);
+    if (extraImages.length) {
+      if (y > 232) {
+        doc.addPage();
+        y = 18;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(11, 47, 109);
+      doc.text('Fotos complementares', margin, y);
+      y += 6;
+
+      const photoWidth = 42;
+      const photoHeight = 34;
+      extraImages.forEach((image, imageIndex) => {
+        const x = margin + ((imageIndex % 4) * (photoWidth + 6));
+        const imageY = y + (Math.floor(imageIndex / 4) * (photoHeight + 9));
+        addPdfImage(doc, image, x, imageY, photoWidth, photoHeight);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(109, 122, 147);
+        doc.text(`Foto ${imageIndex + 2}`, x, imageY + photoHeight + 4);
+      });
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(109, 122, 147);
+    doc.text('Luz de Campo', margin, pageHeight - 8);
+    doc.text(`Pagina ${index + 1}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  }
+
+  doc.save(`relatorio_luz_de_campo_${generatedAt.toISOString().slice(0, 10)}.pdf`);
+}
+
 function isEntryReadyToSync(entry) {
   return (
     Number.isFinite(toNumber(entry?.LATITUDE))
@@ -1542,6 +1804,7 @@ export default function App() {
   const [managerLoading, setManagerLoading] = useState(false);
   const [managerRows, setManagerRows] = useState([]);
   const [managerRowsLoading, setManagerRowsLoading] = useState(false);
+  const [selectedManagerRowIds, setSelectedManagerRowIds] = useState([]);
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
@@ -2444,6 +2707,10 @@ export default function App() {
     try {
       const rows = await fetchSubmissionExport('all');
       setManagerRows(rows);
+      setSelectedManagerRowIds((current) => {
+        const availableIds = new Set(rows.map(getManagerRowId));
+        return current.filter((id) => availableIds.has(id));
+      });
     } catch (error) {
       setToast(error.message || 'Não foi possível carregar os pontos registrados.');
     } finally {
@@ -2687,6 +2954,16 @@ export default function App() {
       if (!filter) return true;
       return formatManagerCellValue(exportRow[field]).toLowerCase().includes(filter);
     })), [managerRows, managerTableFilters]);
+
+  const selectedManagerIdSet = useMemo(
+    () => new Set(selectedManagerRowIds),
+    [selectedManagerRowIds]
+  );
+  const selectedManagerRows = useMemo(
+    () => managerTableRows.filter(({ clientUuid }) => selectedManagerIdSet.has(clientUuid)),
+    [managerTableRows, selectedManagerIdSet]
+  );
+  const allManagerRowsSelected = managerTableRows.length > 0 && selectedManagerRows.length === managerTableRows.length;
 
   const handleCreateManagerUser = useCallback(async (event) => {
     event.preventDefault();
@@ -2943,6 +3220,41 @@ export default function App() {
     }
   }, [activeOperator, loadManagerSummary]);
 
+  const handleToggleManagerRowSelection = useCallback((rowId) => {
+    if (!rowId) return;
+    setSelectedManagerRowIds((current) => (
+      current.includes(rowId)
+        ? current.filter((id) => id !== rowId)
+        : [...current, rowId]
+    ));
+  }, []);
+
+  const handleToggleAllManagerRowsSelection = useCallback(() => {
+    setSelectedManagerRowIds((current) => {
+      if (managerTableRows.length > 0 && selectedManagerRows.length === managerTableRows.length) {
+        return [];
+      }
+      return managerTableRows.map(({ clientUuid }) => clientUuid).filter(Boolean);
+    });
+  }, [managerTableRows, selectedManagerRows.length]);
+
+  const handleGenerateManagerPdf = useCallback(async () => {
+    if (!selectedManagerRows.length) {
+      setToast('Selecione pelo menos um ponto na tabela para gerar o PDF.');
+      return;
+    }
+
+    try {
+      setManagerLoading(true);
+      await createManagerPdfReport(selectedManagerRows);
+      setToast(`${selectedManagerRows.length} ponto(s) incluÃ­do(s) no PDF.`);
+    } catch (error) {
+      setToast(error.message || 'Nao foi possivel gerar o relatorio em PDF.');
+    } finally {
+      setManagerLoading(false);
+    }
+  }, [selectedManagerRows]);
+
   const handleSyncSingleEntry = useCallback(async (entry) => {
     if (!isEntryReadyToSync(entry)) {
       setToast('Confirme o local e marque implantação concluída = SIM antes de enviar.');
@@ -3170,15 +3482,25 @@ export default function App() {
               <div>
                 <span className="panel-step">Registros</span>
                 <strong>Pontos registrados</strong>
-                <small>{managerTableRows.length} linha(s) no recorte ativo</small>
+                <small>{managerTableRows.length} linha(s) no recorte ativo · {selectedManagerRows.length} selecionado(s)</small>
               </div>
-              <button
-                type="button"
-                className="manager-maximize-button"
-                onClick={() => setManagerTableMaximized((current) => !current)}
-              >
-                {managerTableMaximized ? 'Voltar' : 'Maximizar'}
-              </button>
+              <div className="manager-table-header-actions">
+                <button
+                  type="button"
+                  className="primary-action manager-pdf-button"
+                  onClick={handleGenerateManagerPdf}
+                  disabled={!selectedManagerRows.length || managerLoading}
+                >
+                  {managerLoading ? 'Gerando PDF...' : `Gerar PDF (${selectedManagerRows.length})`}
+                </button>
+                <button
+                  type="button"
+                  className="manager-maximize-button"
+                  onClick={() => setManagerTableMaximized((current) => !current)}
+                >
+                  {managerTableMaximized ? 'Voltar' : 'Maximizar'}
+                </button>
+              </div>
             </div>
 
             {managerRowsLoading ? (
@@ -3190,6 +3512,14 @@ export default function App() {
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
+                      <th className="manager-table-select-col">
+                        <input
+                          type="checkbox"
+                          checked={allManagerRowsSelected}
+                          onChange={handleToggleAllManagerRowsSelection}
+                          aria-label="Selecionar todos os pontos do recorte"
+                        />
+                      </th>
                       <th>Item</th>
                       {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                         <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
@@ -3198,6 +3528,7 @@ export default function App() {
                       <th className="manager-table-actions-col">Ações</th>
                     </tr>
                     <tr className="manager-table-filter-row">
+                      <th />
                       <th />
                       {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                         <th key={`filter-${field}`}>
@@ -3216,8 +3547,18 @@ export default function App() {
                     {managerTableRows.map(({ row, exportRow, clientUuid, index }) => {
                       const rowClientUuid = clientUuid;
                       const isEditing = managerEditingClientUuid === rowClientUuid;
+                      const isSelected = selectedManagerIdSet.has(rowClientUuid);
                       return (
-                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`}>
+                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`} className={isSelected ? 'is-selected' : ''}>
+                          <td data-label="PDF" className="manager-table-select-cell">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
+                              disabled={!rowClientUuid}
+                              aria-label={`Selecionar ponto ${index + 1} para PDF`}
+                            />
+                          </td>
                           <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
                           {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
                             <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field}>
