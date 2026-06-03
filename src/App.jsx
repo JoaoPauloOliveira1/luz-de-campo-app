@@ -308,7 +308,6 @@ const FORM_FIELDS = [
   'TIPO_IMPLANTACAO',
   'MOTIVO_IMPLANTACAO',
   'OBRA_NOME',
-  'IMPLANTACAO_CONCLUIDA',
   'RPA',
   'LOCALIZACA',
   'ENDERECO',
@@ -536,6 +535,18 @@ function exportSaoJoaoWorkbook(rows) {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'SaoJoao');
   XLSX.writeFileXLSX(workbook, `vistoria_sao_joao_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function downloadJsonFile(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function buildExportRow(row) {
@@ -918,8 +929,19 @@ function isEntryReadyToSync(entry) {
   return (
     Number.isFinite(toNumber(entry?.LATITUDE))
     && Number.isFinite(toNumber(entry?.LONGITUDE))
-    && entry?.IMPLANTACAO_CONCLUIDA === 'SIM'
+    && entry?.__obraFinalizadaConfirmada === true
   );
+}
+
+function getEntrySyncLabel(entry) {
+  if (entry?.__syncStatus === 'synced') return 'Enviado ao banco';
+  if (entry?.__syncStatus === 'syncing') return 'Enviando agora';
+  if (entry?.__syncStatus === 'error') return 'Erro no envio';
+  if (!Number.isFinite(toNumber(entry?.LATITUDE)) || !Number.isFinite(toNumber(entry?.LONGITUDE))) {
+    return 'Confirme a localização';
+  }
+  if (!entry?.__obraFinalizadaConfirmada) return 'Aguardando finalizar obra';
+  return 'Pronto para envio';
 }
 
 function buildFormFocusSequence(currentForm) {
@@ -1132,7 +1154,21 @@ function getStoredQueue() {
     const rawEntries = window.localStorage.getItem(QUEUE_STORAGE_KEY);
     if (!rawEntries) return [];
     const parsed = JSON.parse(rawEntries);
-    return Array.isArray(parsed) ? parsed.map((entry) => normalizeEntryShape(entry)) : [];
+    return Array.isArray(parsed)
+      ? parsed.map((entry) => {
+          const normalized = normalizeEntryShape(entry);
+          const obraFinalizada = Boolean(entry.__obraFinalizadaConfirmada || normalized.IMPLANTACAO_CONCLUIDA === 'SIM');
+          return {
+            ...normalized,
+            __obraFinalizadaConfirmada: obraFinalizada,
+            IMPLANTACAO_CONCLUIDA: obraFinalizada ? 'SIM' : '',
+            __syncStatus: entry.__syncStatus || (obraFinalizada ? 'pending' : 'draft'),
+            __syncAttempts: entry.__syncAttempts || 0,
+            __lastSyncAttemptAt: entry.__lastSyncAttemptAt || '',
+            __lastSyncError: entry.__lastSyncError || '',
+          };
+        })
+      : [];
   } catch {
     return [];
   }
@@ -1955,8 +1991,16 @@ export default function App() {
   );
 
   const pendingEntries = useMemo(
-    () => entries.filter((entry) => entry.__syncStatus !== 'synced'),
-    [entries]
+    () => operatorEntries.filter((entry) => entry.__syncStatus !== 'synced'),
+    [operatorEntries]
+  );
+  const syncedOperatorEntries = useMemo(
+    () => operatorEntries.filter((entry) => entry.__syncStatus === 'synced'),
+    [operatorEntries]
+  );
+  const errorOperatorEntries = useMemo(
+    () => operatorEntries.filter((entry) => entry.__syncStatus === 'error'),
+    [operatorEntries]
   );
   const syncablePendingEntries = useMemo(
     () => pendingEntries.filter((entry) => isEntryReadyToSync(entry)),
@@ -1968,13 +2012,19 @@ export default function App() {
   );
   const filteredOperatorEntries = useMemo(() => {
     if (queueFilter === 'ready') {
-      return operatorEntries.filter((entry) => isEntryReadyToSync(entry));
+      return syncablePendingEntries;
     }
     if (queueFilter === 'waiting') {
-      return operatorEntries.filter((entry) => !isEntryReadyToSync(entry));
+      return awaitingConfirmationEntries;
+    }
+    if (queueFilter === 'synced') {
+      return syncedOperatorEntries;
+    }
+    if (queueFilter === 'error') {
+      return errorOperatorEntries;
     }
     return operatorEntries;
-  }, [operatorEntries, queueFilter]);
+  }, [awaitingConfirmationEntries, errorOperatorEntries, operatorEntries, queueFilter, syncablePendingEntries, syncedOperatorEntries]);
   const requiredFieldsFilled = useMemo(
     () => {
       const baseFields = buildFormFocusSequence(form).filter((field) => !field.startsWith('LUMINARIA_'));
@@ -2664,6 +2714,9 @@ export default function App() {
       OPERADOR_ID: activeOperator?.id || saoJoaoForm.OPERADOR_ID,
       __id: crypto.randomUUID(),
       __syncStatus: 'pending',
+      __syncAttempts: 0,
+      __lastSyncAttemptAt: '',
+      __lastSyncError: '',
       __createdAt: new Date().toISOString(),
     };
 
@@ -2685,11 +2738,51 @@ export default function App() {
 
     try {
       setSaoJoaoSyncing(true);
+      const attemptAt = new Date().toISOString();
+      const pendingIds = new Set(pending.map((entry) => entry.CLIENT_UUID));
+      setSaoJoaoEntries((current) => current.map((entry) => (
+        pendingIds.has(entry.CLIENT_UUID)
+          ? {
+              ...entry,
+              __syncStatus: 'syncing',
+              __lastSyncAttemptAt: attemptAt,
+              __syncAttempts: (entry.__syncAttempts || 0) + 1,
+              __lastSyncError: '',
+            }
+          : entry
+      )));
       const result = await syncSaoJoaoEntries(pending);
       const syncedIds = new Set(result.client_uuids || []);
-      setSaoJoaoEntries((current) => current.filter((entry) => !syncedIds.has(entry.CLIENT_UUID)));
-      setToast(`${syncedIds.size} checklist(s) do São João sincronizado(s).`);
+      const failedCount = pending.length - syncedIds.size;
+      setSaoJoaoEntries((current) => current.map((entry) => (
+        !pendingIds.has(entry.CLIENT_UUID)
+          ? entry
+          : syncedIds.has(entry.CLIENT_UUID)
+            ? {
+                ...entry,
+                __syncStatus: 'synced',
+                __syncedAt: new Date().toISOString(),
+                __lastSyncError: '',
+              }
+            : {
+                ...entry,
+                __syncStatus: 'error',
+                __lastSyncError: 'Sincronização parcial. Reenvie este checklist quando possível.',
+              }
+      )));
+      setToast(failedCount > 0
+        ? `${syncedIds.size} checklist(s) enviado(s). ${failedCount} continuam salvos para reenviar.`
+        : `${syncedIds.size} checklist(s) sincronizado(s) e mantido(s) no histórico local.`);
     } catch (error) {
+      setSaoJoaoEntries((current) => current.map((entry) => (
+        pending.some((item) => item.CLIENT_UUID === entry.CLIENT_UUID)
+          ? {
+              ...entry,
+              __syncStatus: 'error',
+              __lastSyncError: error.message || 'Falha ao sincronizar. Reenvie quando a internet voltar.',
+            }
+          : entry
+      )));
       setToast(error.message || 'Falha ao sincronizar o checklist do São João.');
     } finally {
       setSaoJoaoSyncing(false);
@@ -2724,6 +2817,19 @@ export default function App() {
   const performSyncEntries = useCallback(async (targetEntries) => {
     if (!targetEntries.length || syncing || !online) return;
     setSyncing(true);
+    const attemptAt = new Date().toISOString();
+    const targetIds = new Set(targetEntries.map((entry) => entry.CLIENT_UUID));
+    setEntries((current) => current.map((entry) => (
+      targetIds.has(entry.CLIENT_UUID)
+        ? {
+            ...entry,
+            __syncStatus: 'syncing',
+            __lastSyncAttemptAt: attemptAt,
+            __syncAttempts: (entry.__syncAttempts || 0) + 1,
+            __lastSyncError: '',
+          }
+        : entry
+    )));
     try {
       const payloadEntries = targetEntries.map((entry) => ({
         ...normalizeEntryShape(entry),
@@ -2759,24 +2865,37 @@ export default function App() {
 
       const result = await syncFieldEntries(payloadEntries);
       const syncedIds = new Set(result.client_uuids || []);
+      const failedCount = targetEntries.length - syncedIds.size;
       setEntries((current) => current.map((entry) => (
-        syncedIds.has(entry.CLIENT_UUID)
-          ? {
-              ...entry,
-              __syncStatus: 'synced',
-              __syncedAt: new Date().toISOString(),
-              __removing: true,
-            }
-          : entry
+        !targetIds.has(entry.CLIENT_UUID)
+          ? entry
+          : syncedIds.has(entry.CLIENT_UUID)
+            ? {
+                ...entry,
+                __syncStatus: 'synced',
+                __syncedAt: new Date().toISOString(),
+                __lastSyncError: '',
+                __removing: false,
+              }
+            : {
+                ...entry,
+                __syncStatus: 'error',
+                __lastSyncError: 'Dados principais podem ter sido salvos, mas imagens ou confirmação final falharam. Reenvie este item.',
+                __removing: false,
+              }
       )));
-      setToast(`${syncedIds.size} registro(s) sincronizado(s) com o banco.`);
-      window.setTimeout(() => {
-        setEntries((current) => current.filter((entry) => !syncedIds.has(entry.CLIENT_UUID)));
-      }, 1200);
+      setToast(failedCount > 0
+        ? `${syncedIds.size} enviado(s). ${failedCount} item(ns) continuam salvos para reenviar.`
+        : `${syncedIds.size} registro(s) enviado(s) e mantido(s) no histórico local.`);
     } catch (error) {
       setEntries((current) => current.map((entry) => (
-        targetEntries.some((pending) => pending.CLIENT_UUID === entry.CLIENT_UUID)
-          ? { ...entry, __syncStatus: 'error' }
+        targetIds.has(entry.CLIENT_UUID)
+          ? {
+              ...entry,
+              __syncStatus: 'error',
+              __lastSyncError: error.message || 'Falha na sincronização. Reenvie quando a internet voltar.',
+              __removing: false,
+            }
           : entry
       )));
       setToast(error.message || 'Falha na sincronização. Os dados continuam salvos no aparelho.');
@@ -2787,7 +2906,7 @@ export default function App() {
 
   const handleSyncEntries = useCallback(async () => {
     if (!syncablePendingEntries.length) {
-      setToast('Confirme o local e marque implantação concluída = SIM antes de sincronizar.');
+      setToast('Confirme o local e marque Obra finalizada antes de sincronizar.');
       return;
     }
 
@@ -3264,10 +3383,13 @@ export default function App() {
     }
 
     const normalizedLuminarias = normalizeLuminaireItems(form.LUMINARIAS, form.QTDE);
+    const previousEntry = editingEntryId
+      ? entries.find((entry) => entry.__id === editingEntryId)
+      : null;
     const nextEntry = {
       ...form,
       CLIENT_UUID: editingEntryId
-        ? (entries.find((entry) => entry.__id === editingEntryId)?.CLIENT_UUID || crypto.randomUUID())
+        ? (previousEntry?.CLIENT_UUID || crypto.randomUUID())
         : crypto.randomUUID(),
       OPERADOR: activeOperator?.name || form.OPERADOR,
       OPERADOR_ID: activeOperator?.id || null,
@@ -3276,9 +3398,14 @@ export default function App() {
       LATITUDE: formatCoordinate(toNumber(form.LATITUDE)),
       LONGITUDE: formatCoordinate(toNumber(form.LONGITUDE)),
       POTENCIA: computeLuminairePotenciaTotal(normalizedLuminarias),
-      __syncStatus: isEntryReadyToSync(form) ? 'pending' : 'draft',
+      IMPLANTACAO_CONCLUIDA: previousEntry?.IMPLANTACAO_CONCLUIDA || '',
+      __obraFinalizadaConfirmada: Boolean(previousEntry?.__obraFinalizadaConfirmada),
+      __syncStatus: previousEntry?.__syncStatus === 'synced' ? 'pending' : previousEntry?.__syncStatus || 'draft',
+      __syncAttempts: previousEntry?.__syncAttempts || 0,
+      __lastSyncAttemptAt: previousEntry?.__lastSyncAttemptAt || '',
+      __lastSyncError: '',
       __createdAt: editingEntryId
-        ? (entries.find((entry) => entry.__id === editingEntryId)?.__createdAt || new Date().toISOString())
+        ? (previousEntry?.__createdAt || new Date().toISOString())
         : new Date().toISOString(),
     };
     const nextPointSeed = buildNextPointForm(nextEntry, activeOperator?.name || '');
@@ -3312,11 +3439,9 @@ export default function App() {
     }
     setStep('location');
     setGeoStatus('Ponto salvo na fila local.');
-    setToast(
-      isEntryReadyToSync(form)
-        ? (editingEntryId ? 'Ponto atualizado. Toque em Novo ponto para seguir.' : 'Ponto salvo. Toque em Novo ponto para seguir.')
-        : 'Ponto salvo, mas ainda não está pronto para envio.'
-    );
+    setToast(editingEntryId
+      ? 'Ponto atualizado. Confirme a obra finalizada na fila antes de enviar.'
+      : 'Ponto salvo. Confirme a obra finalizada na fila antes de enviar.');
   }, [activeOperator, confirmedPosition, editingEntryId, entries, form]);
 
   const handleExport = useCallback(() => {
@@ -3327,6 +3452,46 @@ export default function App() {
     exportWorkbook(operatorEntries);
     setToast('Planilha exportada no formato ideal para importação.');
   }, [operatorEntries]);
+
+  const handleExportLocalBackup = useCallback(() => {
+    if (!operatorEntries.length) {
+      setToast('Nenhum registro local para gerar backup.');
+      return;
+    }
+
+    const now = new Date();
+    downloadJsonFile(`backup_luz_de_campo_${now.toISOString().slice(0, 10)}.json`, {
+      tipo: 'backup-local-luz-de-campo',
+      gerado_em: now.toISOString(),
+      operador: {
+        id: activeOperator?.id || null,
+        nome: activeOperator?.name || '',
+      },
+      total_registros: operatorEntries.length,
+      enviados: syncedOperatorEntries.length,
+      pendentes: pendingEntries.length,
+      registros: operatorEntries,
+    });
+    setToast('Backup local baixado. Guarde esse arquivo em local seguro.');
+  }, [activeOperator, operatorEntries, pendingEntries.length, syncedOperatorEntries.length]);
+
+  const handleToggleEntryCompletion = useCallback((entryId, checked) => {
+    setEntries((current) => current.map((entry) => {
+      if (entry.__id !== entryId) return entry;
+      const nextStatus = checked && Number.isFinite(toNumber(entry.LATITUDE)) && Number.isFinite(toNumber(entry.LONGITUDE))
+        ? 'pending'
+        : 'draft';
+
+      return {
+        ...entry,
+        IMPLANTACAO_CONCLUIDA: checked ? 'SIM' : '',
+        __obraFinalizadaConfirmada: checked,
+        __syncStatus: entry.__syncStatus === 'synced' && checked ? 'synced' : nextStatus,
+        __lastSyncError: checked ? '' : entry.__lastSyncError,
+      };
+    }));
+    setToast(checked ? 'Obra marcada como finalizada. Ponto pronto para envio.' : 'Obra desmarcada. Ponto não será enviado ainda.');
+  }, []);
 
   const handleManagerExport = useCallback(async (scope) => {
     if (!activeOperator?.can_export) return;
@@ -3411,7 +3576,7 @@ export default function App() {
 
   const handleSyncSingleEntry = useCallback(async (entry) => {
     if (!isEntryReadyToSync(entry)) {
-      setToast('Confirme o local e marque implantação concluída = SIM antes de enviar.');
+      setToast('Confirme o local e marque Obra finalizada antes de enviar.');
       return;
     }
 
@@ -3419,9 +3584,16 @@ export default function App() {
   }, [performSyncEntries]);
 
   const handleRemoveEntry = useCallback((id) => {
+    const entry = entries.find((item) => item.__id === id);
+    const message = entry?.__syncStatus === 'synced'
+      ? 'Remover este item apenas do histórico local? O registro enviado continuará no banco.'
+      : 'Remover este registro local ainda não enviado?';
+    if (!window.confirm(message)) {
+      return;
+    }
     setEntries((current) => current.filter((entry) => entry.__id !== id));
     setEditingEntryId((current) => (current === id ? null : current));
-  }, []);
+  }, [entries]);
 
   if (!activeOperator) {
     return (
@@ -4388,7 +4560,7 @@ export default function App() {
           <div className="panel-header">
             <span className="panel-step">Etapa 3</span>
             <strong>Fila local</strong>
-            <small>Os pontos ficam no aparelho e sobem para o banco quando houver conexão.</small>
+            <small>Os pontos ficam no aparelho e só saem da pendência depois da confirmação do banco.</small>
           </div>
 
         {syncing && (
@@ -4396,7 +4568,7 @@ export default function App() {
             <span className="queue-sync-spinner" aria-hidden="true" />
             <div className="queue-sync-copy">
               <strong>Sincronizando com o banco</strong>
-              <span>Enviando os pontos prontos e limpando a fila local.</span>
+              <span>Enviando os pontos prontos. O histórico local será mantido como segurança.</span>
             </div>
           </div>
         )}
@@ -4406,7 +4578,7 @@ export default function App() {
             <div className="queue-counter">
               <strong>{operatorEntries.length}</strong>
               <span>
-                {syncablePendingEntries.length} pronto(s) para envio · {awaitingConfirmationEntries.length} pendente(s) de confirmação · {online ? 'online' : 'offline'}
+                {syncedOperatorEntries.length} enviado(s) · {syncablePendingEntries.length} pronto(s) · {awaitingConfirmationEntries.length} aguardando finalização · {errorOperatorEntries.length} com erro · {online ? 'online' : 'offline'}
               </span>
             </div>
             <div className="queue-filters" role="tablist" aria-label="Filtrar fila local">
@@ -4429,11 +4601,28 @@ export default function App() {
                 className={`queue-filter${queueFilter === 'waiting' ? ' active' : ''}`}
                 onClick={() => setQueueFilter('waiting')}
               >
-                Pendentes
+                Aguardando finalização
+              </button>
+              <button
+                type="button"
+                className={`queue-filter${queueFilter === 'synced' ? ' active' : ''}`}
+                onClick={() => setQueueFilter('synced')}
+              >
+                Enviados
+              </button>
+              <button
+                type="button"
+                className={`queue-filter${queueFilter === 'error' ? ' active' : ''}`}
+                onClick={() => setQueueFilter('error')}
+              >
+                Erros
               </button>
             </div>
           </div>
           <div className="queue-actions">
+            <button className="ghost-action queue-export-action" type="button" onClick={handleExportLocalBackup}>
+              Baixar backup local
+            </button>
             {activeOperator.can_export && (
               <button className="ghost-action queue-export-action" type="button" onClick={handleExport}>
                 Exportar planilha
@@ -4463,18 +4652,33 @@ export default function App() {
                 <div>
                   <strong>{entry.ENDERECO || 'Sem endereço'}</strong>
                   <span>{entry.BAIRRO || 'Sem bairro'} · RPA {entry.RPA || '-'}</span>
-                  <span>{entry.TIPO_IMPLANTACAO || 'Situação não informada'} · Implantação {entry.IMPLANTACAO_CONCLUIDA === 'SIM' ? 'concluída' : 'em aberto'}</span>
+                  <span>{entry.TIPO_IMPLANTACAO || 'Situação não informada'} · Obra {entry.__obraFinalizadaConfirmada ? 'finalizada' : 'em aberto'}</span>
                   {countLuminaireImages(entry.LUMINARIAS || []) > 0 && (
                     <span>{countLuminaireImages(entry.LUMINARIAS || [])} foto(s) anexada(s)</span>
                   )}
                   <small>
-                    {entry.LATITUDE}, {entry.LONGITUDE} · {entry.__syncStatus === 'synced' ? 'Sincronizado' : isEntryReadyToSync(entry) ? 'Pronto para envio' : 'Pendente de confirmação'}
+                    {entry.LATITUDE}, {entry.LONGITUDE} · {getEntrySyncLabel(entry)}
                   </small>
+                  {(entry.__lastSyncAttemptAt || entry.__lastSyncError) && (
+                    <small className="queue-sync-meta">
+                      {entry.__lastSyncAttemptAt ? `Tentativa ${entry.__syncAttempts || 1}: ${new Date(entry.__lastSyncAttemptAt).toLocaleString('pt-BR')}` : ''}
+                      {entry.__lastSyncError ? ` · ${entry.__lastSyncError}` : ''}
+                    </small>
+                  )}
                 </div>
                 <div className="queue-item-actions">
                   {!isEntryReadyToSync(entry) && (
-                    <span className="queue-warning">Confirme local e conclusão</span>
+                    <span className="queue-warning">Confirme local e obra finalizada</span>
                   )}
+                  <label className={`queue-completion-check${entry.__obraFinalizadaConfirmada ? ' is-checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(entry.__obraFinalizadaConfirmada)}
+                      onChange={(event) => handleToggleEntryCompletion(entry.__id, event.target.checked)}
+                      disabled={entry.__syncStatus === 'syncing' || entry.__syncStatus === 'synced'}
+                    />
+                    Obra finalizada
+                  </label>
                   <button type="button" className="shortcut-action shortcut-action-light" onClick={() => handleEditEntry(entry)}>
                     Editar
                   </button>
@@ -4482,9 +4686,9 @@ export default function App() {
                     type="button"
                     className="primary-action queue-sync-action"
                     onClick={() => handleSyncSingleEntry(entry)}
-                    disabled={!online || syncing || !isEntryReadyToSync(entry)}
+                    disabled={!online || syncing || !isEntryReadyToSync(entry) || entry.__syncStatus === 'synced'}
                   >
-                    Enviar
+                    {entry.__syncStatus === 'synced' ? 'Enviado' : 'Enviar'}
                   </button>
                   <button type="button" className="ghost-action" onClick={() => handleRemoveEntry(entry.__id)}>
                     Remover
