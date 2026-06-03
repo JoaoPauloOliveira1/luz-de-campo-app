@@ -205,6 +205,17 @@ select {
   display: grid;
   gap: 7px;
   margin-top: 8px;
+  max-height: 238px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.auth-operator-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .auth-operator-option {

@@ -3799,8 +3799,9 @@ export default function App() {
                 placeholder={authLoading ? 'Carregando usuários...' : 'Digite o nome do usuário'}
                 onChange={(event) => handleOperatorSearchChange(event.target.value)}
               />
+              <small className="auth-operator-hint">Digite para filtrar ou escolha diretamente na lista.</small>
               <div className="auth-operator-results" role="listbox" aria-label="Usuários encontrados">
-                {filteredAllowedOperators.slice(0, 6).map((operator) => (
+                {filteredAllowedOperators.map((operator) => (
                   <button
                     key={operator.id}
                     type="button"
