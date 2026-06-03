@@ -224,7 +224,9 @@ const FIELD_PLACEHOLDERS = {
 };
 
 const SESSION_STORAGE_KEY = 'luz-de-campo-session';
+const MODULE_STORAGE_KEY = 'luz-de-campo-active-module';
 const QUEUE_STORAGE_KEY = 'luz-de-campo-queue';
+const SAO_JOAO_QUEUE_STORAGE_KEY = 'luz-de-campo-sao-joao-queue';
 const LOCATION_CONTEXT_CACHE_KEY = 'luz-de-campo-location-context';
 const OFFLINE_ACCESS_STORAGE_KEY = 'luz-de-campo-offline-access';
 const OPERATORS_CACHE_STORAGE_KEY = 'luz-de-campo-operators-cache';
@@ -250,6 +252,18 @@ function resolveFieldApiBaseUrl(rawUrl) {
 
 const FIELD_API_BASE_URL = resolveFieldApiBaseUrl(import.meta.env.VITE_FIELD_API_BASE_URL);
 const MAX_OFFLINE_RPAS = 3;
+const DEFAULT_FIELD_MODULES = [
+  {
+    slug: 'implantacao-obra',
+    name: 'IMPLANTAÇÃO/OBRA',
+    description: 'Formulário atual para registrar pontos de iluminação.',
+  },
+  {
+    slug: 'sao-joao',
+    name: 'SÃO JOÃO',
+    description: 'Checklist temporário para polos e estruturas do evento.',
+  },
+];
 const MAP_TILE_URLS = [
   'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
   'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
@@ -306,6 +320,66 @@ const FORM_FIELDS = [
   'TIPO_LAMPA',
   'QTDE',
 ];
+
+const SAO_JOAO_ANSWER_OPTIONS = ['SIM', 'NÃO', 'NÃO SE APLICA'];
+const SAO_JOAO_QUESTIONS = [
+  {
+    group: 'Documentação técnica',
+    items: [
+      { key: 'q01_art', label: '1. A infraestrutura possui ART?', photos: [{ key: 'foto_art', label: 'Foto da ART' }] },
+      { key: 'q02_projeto_art', label: '2. O projeto elétrico com os equipamentos foi encaminhado para a EMLURB junto com a ART?' },
+      { key: 'q03_responsavel_presente', label: '3. O responsável técnico está presente durante a montagem?' },
+      { key: 'q04_neoenergia', label: '4. O fornecimento da energia é feito pela Neoenergia PE?' },
+    ],
+  },
+  {
+    group: 'Proteções e cargas',
+    items: [
+      { key: 'q05_cargas_rede_ip', label: '5. Existem cargas conectadas diretamente à rede elétrica de IP?', photos: [{ key: 'foto_cargas_rede_ip', label: 'Foto das cargas conectadas à rede de IP' }] },
+      { key: 'q06_disjuntor', label: '6. A instalação possui disjuntor termomagnético?', photos: [{ key: 'foto_sem_disjuntor', label: 'Foto do quadro sem disjuntor' }] },
+      { key: 'q07_dps', label: '7. A instalação possui DPS?', photos: [{ key: 'foto_sem_dps', label: 'Foto do quadro sem DPS' }] },
+      { key: 'q08_dr', label: '8. A instalação possui DR?', photos: [{ key: 'foto_sem_dr', label: 'Foto do quadro sem DR' }] },
+      { key: 'q09_dr_30ma', label: '9. O DR instalado é de alta sensibilidade (30mA)?', photos: [{ key: 'foto_dr_baixa_sensibilidade', label: 'Foto do DR com baixa sensibilidade' }] },
+    ],
+  },
+  {
+    group: 'Aterramento',
+    items: [
+      { key: 'q10_partes_metalicas_aterradas', label: '10. As partes metálicas da estrutura estão aterradas?', photos: [{ key: 'foto_sem_aterramento', label: 'Foto do local sem aterramento' }] },
+      {
+        key: 'q11_aterramento_adequado',
+        label: '11. O aterramento está adequado?',
+        photos: [
+          { key: 'foto_estrutura_aterrada', label: 'Foto da estrutura metálica aterrada' },
+          { key: 'foto_aterramento_inadequado', label: 'Foto da estrutura metálica com aterramento inadequado' },
+        ],
+      },
+      { key: 'q12_copperweld', label: '12. O aterramento usa vara Copperweld 5/8x2,40m, conector GAR/GTDU ou solda exotérmica e cabo verde mínimo 16mm²?', photos: [{ key: 'foto_aterramento', label: 'Foto do aterramento' }] },
+      { key: 'q13_aterramento_massas', label: '13. O aterramento das massas foi respeitado?', photos: [{ key: 'foto_aterramento_massas', label: 'Foto do aterramento das massas' }] },
+    ],
+  },
+  {
+    group: 'Cabeamento e interferências',
+    items: [
+      { key: 'q14_cabos_expostos', label: '14. Existem cabeamentos expostos ao tempo, no chão ou amarrados em estruturas metálicas?', photos: [{ key: 'foto_cabos_expostos', label: 'Foto do cabeamento exposto, no chão ou amarrado' }] },
+      { key: 'q15_trilho_passacabo', label: '15. Foi usado trilho passa-cabo protegendo os cabeamentos?', photos: [{ key: 'foto_cabos_sem_protecao', label: 'Foto dos cabos sem proteção' }] },
+      { key: 'q16_iluminacao_provisoria', label: '16. Existem projetores, refletores ou iluminação provisória em postes metálicos exclusivos de IP ou árvores?', photos: [{ key: 'foto_iluminacao_provisoria', label: 'Foto da iluminação provisória em poste metálico ou árvore' }] },
+      { key: 'q17_equipamentos_qualidade', label: '17. Os equipamentos usados nas instalações elétricas provisórias são de boa qualidade?' },
+      { key: 'q18_elementos_ip', label: '18. Existem bandeiras, barracas, refletores, fiações ou outros elementos nos postes/equipamentos de IP?', photos: [{ key: 'foto_elementos_ip', label: 'Foto dos elementos no sistema de IP' }] },
+    ],
+  },
+  {
+    group: 'Riscos e violações',
+    items: [
+      { key: 'q19_distancias_at_mt', label: '19. As distâncias das estruturas para AT e MT estão respeitadas?', photos: [{ key: 'foto_distancias_at_mt', label: 'Foto das distâncias para rede AT ou MT' }] },
+      { key: 'q20_caixas_violadas', label: '20. As caixas de passagem subterrâneas estão violadas?', photos: [{ key: 'foto_caixas_violadas', label: 'Foto das caixas violadas' }] },
+      { key: 'q21_medidores_violados', label: '21. Os medidores da Neoenergia estão violados?', photos: [{ key: 'foto_medidores_violados', label: 'Foto dos medidores violados' }] },
+      { key: 'q22_gambiarras', label: '22. Existem cordões luminosos ou gambiarras cruzando vias, grades ou elementos metálicos?', photos: [{ key: 'foto_elementos_cruzando', label: 'Foto dos elementos cruzando vias ou estruturas metálicas' }] },
+    ],
+  },
+];
+
+const SAO_JOAO_PHOTO_FIELDS = SAO_JOAO_QUESTIONS.flatMap((group) => group.items.flatMap((item) => item.photos || []));
 
 function clampLuminaireCount(value) {
   const parsed = Number.parseInt(String(value ?? '').trim(), 10);
@@ -705,6 +779,16 @@ function getStoredOperator() {
   }
 }
 
+function getStoredModule() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(MODULE_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 function getStoredQueue() {
   if (typeof window === 'undefined') return [];
 
@@ -716,6 +800,58 @@ function getStoredQueue() {
   } catch {
     return [];
   }
+}
+
+function getStoredSaoJoaoQueue() {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const rawEntries = window.localStorage.getItem(SAO_JOAO_QUEUE_STORAGE_KEY);
+    if (!rawEntries) return [];
+    const parsed = JSON.parse(rawEntries);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function createInitialSaoJoaoForm(operator) {
+  return {
+    POLO_NOME: '',
+    LATITUDE: '',
+    LONGITUDE: '',
+    OBSERVACOES: '',
+    RESPOSTAS: {},
+    IMAGENS: {},
+    OPERADOR: operator?.name || '',
+    OPERADOR_ID: operator?.id || null,
+  };
+}
+
+function buildSaoJoaoPayload(entry) {
+  const images = SAO_JOAO_PHOTO_FIELDS
+    .map((photoField) => {
+      const image = entry.IMAGENS?.[photoField.key];
+      if (!image) return null;
+      return {
+        ...image,
+        field_key: photoField.key,
+        field_label: photoField.label,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    CLIENT_UUID: entry.CLIENT_UUID,
+    OPERADOR_ID: entry.OPERADOR_ID,
+    OPERADOR: entry.OPERADOR,
+    POLO_NOME: entry.POLO_NOME,
+    LATITUDE: entry.LATITUDE,
+    LONGITUDE: entry.LONGITUDE,
+    RESPOSTAS: entry.RESPOSTAS || {},
+    OBSERVACOES: entry.OBSERVACOES,
+    IMAGENS: images,
+  };
 }
 
 function roundCoordinate(value) {
@@ -1127,6 +1263,36 @@ async function deactivateFieldOperator(managerOperatorId, managerAccessCode, ope
   return response.json();
 }
 
+async function fetchFieldModules({ includeInactive = false } = {}) {
+  try {
+    const params = includeInactive ? '?include_inactive=true' : '';
+    const response = await fetch(`${FIELD_API_BASE_URL}/field-modules${params}`);
+    if (!response.ok) {
+      throw new Error('Não foi possível carregar os módulos.');
+    }
+    const modules = await response.json();
+    return Array.isArray(modules) && modules.length ? modules : DEFAULT_FIELD_MODULES;
+  } catch {
+    return DEFAULT_FIELD_MODULES;
+  }
+}
+
+async function updateFieldModule(moduleSlug, payload) {
+  const response = await fetch(`${FIELD_API_BASE_URL}/field-modules/${encodeURIComponent(moduleSlug)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Não foi possível atualizar o módulo.'));
+  }
+
+  return response.json();
+}
+
 async function syncFieldEntries(entries) {
   if (
     typeof window !== 'undefined'
@@ -1151,6 +1317,27 @@ async function syncFieldEntries(entries) {
 
   if (!response.ok) {
     throw new Error(await readApiError(response, 'Não foi possível sincronizar os apontamentos.'));
+  }
+
+  return response.json();
+}
+
+async function syncSaoJoaoEntries(entries) {
+  let response;
+  try {
+    response = await fetch(`${FIELD_API_BASE_URL}/sao-joao-submissions/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ entries: entries.map((entry) => buildSaoJoaoPayload(entry)) }),
+    });
+  } catch {
+    throw new Error(`Não foi possível alcançar a API em ${FIELD_API_BASE_URL}. Verifique o backend e tente novamente.`);
+  }
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Não foi possível sincronizar o checklist do São João.'));
   }
 
   return response.json();
@@ -1338,6 +1525,8 @@ export default function App() {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [toast, setToast] = useState('');
   const [activeOperator, setActiveOperator] = useState(() => getStoredOperator());
+  const [activeModule, setActiveModule] = useState(() => getStoredModule());
+  const [fieldModules, setFieldModules] = useState(DEFAULT_FIELD_MODULES);
   const [accessForm, setAccessForm] = useState({ operatorId: '', accessCode: '', offlineRpas: [] });
   const [authError, setAuthError] = useState('');
   const [authInfo, setAuthInfo] = useState('');
@@ -1359,6 +1548,7 @@ export default function App() {
   const [managerTableMaximized, setManagerTableMaximized] = useState(false);
   const [managerUsersCollapsed, setManagerUsersCollapsed] = useState(true);
   const [managerRowActionId, setManagerRowActionId] = useState('');
+  const [managerModuleActionSlug, setManagerModuleActionSlug] = useState('');
   const [managerUserForm, setManagerUserForm] = useState({
     managerAccessCode: '',
     name: '',
@@ -1369,6 +1559,10 @@ export default function App() {
   const [managerUserActionId, setManagerUserActionId] = useState(null);
   const [autofocusRequestId, setAutofocusRequestId] = useState(0);
   const [guidedFieldKey, setGuidedFieldKey] = useState('');
+  const [saoJoaoForm, setSaoJoaoForm] = useState(() => createInitialSaoJoaoForm(getStoredOperator()));
+  const [saoJoaoEntries, setSaoJoaoEntries] = useState(() => getStoredSaoJoaoQueue());
+  const [saoJoaoSyncing, setSaoJoaoSyncing] = useState(false);
+  const [saoJoaoImageLoadingKey, setSaoJoaoImageLoadingKey] = useState('');
 
   const canConfirmLocation = useMemo(
     () => Number.isFinite(draftPosition?.lat) && Number.isFinite(draftPosition?.lng),
@@ -1483,6 +1677,31 @@ export default function App() {
   }, [form]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SAO_JOAO_QUEUE_STORAGE_KEY, JSON.stringify(saoJoaoEntries));
+  }, [saoJoaoEntries]);
+
+  useEffect(() => {
+    if (!activeOperator) return undefined;
+    let active = true;
+
+    fetchFieldModules({ includeInactive: Boolean(activeOperator.can_export) }).then((modules) => {
+      if (!active) return;
+      setFieldModules(modules);
+      if (activeModule && !modules.some((module) => module.slug === activeModule)) {
+        setActiveModule(null);
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(MODULE_STORAGE_KEY);
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeModule, activeOperator]);
+
+  useEffect(() => {
     if (!guidedFieldKey) return undefined;
 
     const timer = window.setTimeout(() => {
@@ -1498,6 +1717,11 @@ export default function App() {
     setForm((current) => ({
       ...current,
       OPERADOR: activeOperator.name,
+    }));
+    setSaoJoaoForm((current) => ({
+      ...current,
+      OPERADOR: activeOperator.name,
+      OPERADOR_ID: activeOperator.id,
     }));
   }, [activeOperator]);
 
@@ -1557,6 +1781,7 @@ export default function App() {
 
   useEffect(() => {
     if (!activeOperator) return;
+    if (activeModule !== 'implantacao-obra') return;
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
@@ -1623,7 +1848,7 @@ export default function App() {
       mapRef.current = null;
       markerRef.current = null;
     };
-  }, [activeOperator]);
+  }, [activeModule, activeOperator]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1915,6 +2140,7 @@ export default function App() {
       }
 
       setActiveOperator(loggedOperator);
+      setActiveModule(null);
       setAuthError('');
       setAccessForm({ operatorId: String(loggedOperator.id), accessCode: '', offlineRpas: selectedOfflineRpas });
       if (typeof window !== 'undefined') {
@@ -1926,6 +2152,7 @@ export default function App() {
             can_export: loggedOperator.can_export,
           })
         );
+        window.localStorage.removeItem(MODULE_STORAGE_KEY);
       }
       setToast(`Acesso liberado para ${loggedOperator.name}.`);
     } catch (error) {
@@ -1938,6 +2165,7 @@ export default function App() {
 
   const handleLogout = useCallback(() => {
     setActiveOperator(null);
+    setActiveModule(null);
     setAccessForm({ operatorId: '', accessCode: '', offlineRpas: [] });
     setAuthError('');
     setAuthInfo('');
@@ -1957,7 +2185,150 @@ export default function App() {
     }
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      window.localStorage.removeItem(MODULE_STORAGE_KEY);
     }
+  }, []);
+
+  const handleSelectModule = useCallback((moduleSlug) => {
+    setActiveModule(moduleSlug);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(MODULE_STORAGE_KEY, moduleSlug);
+    }
+    setToast(moduleSlug === 'sao-joao' ? 'Módulo São João aberto.' : 'Módulo Implantação/Obra aberto.');
+  }, []);
+
+  const handleBackToModules = useCallback(() => {
+    setActiveModule(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(MODULE_STORAGE_KEY);
+    }
+  }, []);
+
+  const handleSaoJoaoFieldChange = useCallback((field, value) => {
+    setSaoJoaoForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }, []);
+
+  const handleSaoJoaoAnswerChange = useCallback((field, value) => {
+    setSaoJoaoForm((current) => ({
+      ...current,
+      RESPOSTAS: {
+        ...current.RESPOSTAS,
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const handleSaoJoaoImageSelection = useCallback(async (fieldKey, event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      setSaoJoaoImageLoadingKey(fieldKey);
+      const imagePayload = await prepareImagePayload(file);
+      setSaoJoaoForm((current) => ({
+        ...current,
+        IMAGENS: {
+          ...current.IMAGENS,
+          [fieldKey]: imagePayload,
+        },
+      }));
+      setToast('Foto adicionada ao checklist.');
+    } catch (error) {
+      setToast(error.message || 'Não foi possível preparar a foto.');
+    } finally {
+      setSaoJoaoImageLoadingKey('');
+    }
+  }, []);
+
+  const handleRemoveSaoJoaoImage = useCallback((fieldKey) => {
+    setSaoJoaoForm((current) => {
+      const nextImages = { ...current.IMAGENS };
+      delete nextImages[fieldKey];
+      return { ...current, IMAGENS: nextImages };
+    });
+  }, []);
+
+  const handleCaptureSaoJoaoLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setToast('GPS indisponível neste aparelho.');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = formatCoordinate(position.coords.latitude);
+        const lng = formatCoordinate(position.coords.longitude);
+        setSaoJoaoForm((current) => ({
+          ...current,
+          LATITUDE: lat,
+          LONGITUDE: lng,
+        }));
+        setToast('Localização adicionada ao checklist.');
+      },
+      () => setToast('Não foi possível capturar o GPS agora. Você pode colar as coordenadas.'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  }, []);
+
+  const handlePasteSaoJoaoCoordinates = useCallback((value) => {
+    const parsed = parseManualCoordinates(value);
+    if (!parsed) {
+      setToast('Cole latitude e longitude em um formato válido.');
+      return;
+    }
+    setSaoJoaoForm((current) => ({
+      ...current,
+      LATITUDE: formatCoordinate(parsed.lat),
+      LONGITUDE: formatCoordinate(parsed.lng),
+    }));
+  }, []);
+
+  const handleSaveSaoJoaoEntry = useCallback(() => {
+    const nextEntry = {
+      ...saoJoaoForm,
+      CLIENT_UUID: crypto.randomUUID(),
+      OPERADOR: activeOperator?.name || saoJoaoForm.OPERADOR,
+      OPERADOR_ID: activeOperator?.id || saoJoaoForm.OPERADOR_ID,
+      __id: crypto.randomUUID(),
+      __syncStatus: 'pending',
+      __createdAt: new Date().toISOString(),
+    };
+
+    setSaoJoaoEntries((current) => [nextEntry, ...current]);
+    setSaoJoaoForm(createInitialSaoJoaoForm(activeOperator));
+    setToast('Checklist salvo na fila local.');
+  }, [activeOperator, saoJoaoForm]);
+
+  const handleSyncSaoJoaoEntries = useCallback(async () => {
+    const pending = saoJoaoEntries.filter((entry) => entry.__syncStatus !== 'synced');
+    if (!pending.length) {
+      setToast('Não há checklist pendente para sincronizar.');
+      return;
+    }
+    if (!online) {
+      setToast('Sem conexão. O checklist continua salvo no aparelho.');
+      return;
+    }
+
+    try {
+      setSaoJoaoSyncing(true);
+      const result = await syncSaoJoaoEntries(pending);
+      const syncedIds = new Set(result.client_uuids || []);
+      setSaoJoaoEntries((current) => current.filter((entry) => !syncedIds.has(entry.CLIENT_UUID)));
+      setToast(`${syncedIds.size} checklist(s) do São João sincronizado(s).`);
+    } catch (error) {
+      setToast(error.message || 'Falha ao sincronizar o checklist do São João.');
+    } finally {
+      setSaoJoaoSyncing(false);
+    }
+  }, [online, saoJoaoEntries]);
+
+  const handleRemoveSaoJoaoEntry = useCallback((entryId) => {
+    setSaoJoaoEntries((current) => current.filter((entry) => entry.__id !== entryId));
   }, []);
 
   const handleStartNextPoint = useCallback(() => {
@@ -2178,6 +2549,30 @@ export default function App() {
       setManagerRowActionId('');
     }
   }, [activeOperator, loadManagerRows, loadManagerSummary, managerUserForm.managerAccessCode]);
+
+  const handleToggleManagerModule = useCallback(async (module) => {
+    if (!activeOperator?.can_export) return;
+    if (!managerUserForm.managerAccessCode.trim()) {
+      setToast('Informe o código gerencial antes de alterar módulos.');
+      return;
+    }
+
+    try {
+      setManagerModuleActionSlug(module.slug);
+      await updateFieldModule(module.slug, {
+        manager_operator_id: activeOperator.id,
+        manager_access_code: managerUserForm.managerAccessCode.trim(),
+        active: !module.active,
+      });
+      const modules = await fetchFieldModules({ includeInactive: true });
+      setFieldModules(modules);
+      setToast(`${module.name} foi ${module.active ? 'desativado' : 'ativado'}.`);
+    } catch (error) {
+      setToast(error.message || 'Não foi possível alterar o módulo.');
+    } finally {
+      setManagerModuleActionSlug('');
+    }
+  }, [activeOperator, managerUserForm.managerAccessCode]);
 
   const renderManagerTableCell = useCallback((field, exportRow, isEditing) => {
     const value = exportRow[field];
@@ -2641,6 +3036,41 @@ export default function App() {
     );
   }
 
+  if (!activeOperator.can_export && !activeModule) {
+    return (
+      <div className="field-app module-app">
+        <section className="module-shell">
+          <div>
+            <div className="hero-badge">Luz de Campo</div>
+            <h1>Escolha o módulo</h1>
+            <p>Selecione o tipo de registro que será feito em campo.</p>
+          </div>
+          <div className="module-operator-row">
+            <span className="operator-pill">{activeOperator.name}</span>
+            <button type="button" className="ghost-action" onClick={handleLogout}>
+              Sair
+            </button>
+          </div>
+          <div className="module-grid">
+            {fieldModules.map((module) => (
+              <button
+                key={module.slug}
+                type="button"
+                className="module-card"
+                onClick={() => handleSelectModule(module.slug)}
+              >
+                <span>{module.slug === 'sao-joao' ? 'Evento' : 'Operação'}</span>
+                <strong>{module.name}</strong>
+                <small>{module.description}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+        {toast && <div className="toast">{toast}</div>}
+      </div>
+    );
+  }
+
   if (activeOperator.can_export) {
     return (
       <div className="field-app manager-app">
@@ -2709,6 +3139,29 @@ export default function App() {
               >
                 Atualizar contadores
               </button>
+            </div>
+
+            <div className="manager-modules">
+              <div className="manager-modules-header">
+                <strong>Módulos de campo</strong>
+                <span>Ative apenas o que a equipe deve usar.</span>
+              </div>
+              {fieldModules.map((module) => (
+                <article key={module.slug} className="manager-module-card">
+                  <div>
+                    <strong>{module.name}</strong>
+                    <span>{module.description}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`manager-module-toggle${module.active ? ' is-active' : ''}`}
+                    onClick={() => handleToggleManagerModule(module)}
+                    disabled={managerModuleActionSlug === module.slug}
+                  >
+                    {managerModuleActionSlug === module.slug ? 'Salvando...' : module.active ? 'Ativo' : 'Inativo'}
+                  </button>
+                </article>
+              ))}
             </div>
           </section>
 
@@ -2912,6 +3365,203 @@ export default function App() {
     );
   }
 
+  if (activeModule === 'sao-joao') {
+    const pendingSaoJoaoEntries = saoJoaoEntries.filter((entry) => entry.__syncStatus !== 'synced');
+
+    return (
+      <div className="field-app sao-joao-app">
+        <header className="hero sao-joao-hero">
+          <div className="hero-badge">Luz de Campo</div>
+          <h1>São João</h1>
+          <div className="hero-toolbar">
+            <span className="operator-pill">{activeOperator.name}</span>
+            <div className="module-header-actions">
+              <button type="button" className="hero-logout" onClick={handleBackToModules}>
+                Trocar módulo
+              </button>
+              <button type="button" className="hero-logout" onClick={handleLogout}>
+                Sair
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="sao-joao-layout">
+          <section className="panel sao-joao-form-panel">
+            <div className="panel-header">
+              <span className="panel-step">Checklist</span>
+              <strong>Vistoria do polo</strong>
+              <small>Preencha somente o que for verificado. As fotos são opcionais e ficam vinculadas à pergunta.</small>
+            </div>
+
+            <div className="sao-joao-top-grid">
+              <label className="form-field full">
+                <span>Nome do polo</span>
+                <input
+                  value={saoJoaoForm.POLO_NOME}
+                  placeholder="Ex.: Polo Casa Amarela"
+                  onChange={(event) => handleSaoJoaoFieldChange('POLO_NOME', event.target.value)}
+                />
+              </label>
+
+              <label className="form-field">
+                <span>Latitude</span>
+                <input
+                  value={saoJoaoForm.LATITUDE}
+                  placeholder="-8.052240"
+                  onChange={(event) => handleSaoJoaoFieldChange('LATITUDE', event.target.value)}
+                />
+              </label>
+
+              <label className="form-field">
+                <span>Longitude</span>
+                <input
+                  value={saoJoaoForm.LONGITUDE}
+                  placeholder="-34.928610"
+                  onChange={(event) => handleSaoJoaoFieldChange('LONGITUDE', event.target.value)}
+                />
+              </label>
+
+              <div className="sao-joao-location-actions">
+                <button type="button" className="primary-action" onClick={handleCaptureSaoJoaoLocation}>
+                  Usar GPS
+                </button>
+                <input
+                  type="text"
+                  placeholder="Cole lat, long e pressione Enter"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handlePasteSaoJoaoCoordinates(event.currentTarget.value);
+                      event.currentTarget.value = '';
+                    }
+                  }}
+                  onPaste={(event) => {
+                    window.setTimeout(() => {
+                      handlePasteSaoJoaoCoordinates(event.currentTarget.value);
+                      event.currentTarget.value = '';
+                    }, 0);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="sao-joao-question-groups">
+              {SAO_JOAO_QUESTIONS.map((group) => (
+                <section key={group.group} className="sao-joao-question-group">
+                  <h2>{group.group}</h2>
+                  {group.items.map((question) => (
+                    <article key={question.key} className="sao-joao-question-card">
+                      <div className="sao-joao-question-copy">
+                        <strong>{question.label}</strong>
+                      </div>
+                      <div className="quick-picks">
+                        {SAO_JOAO_ANSWER_OPTIONS.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`quick-pick${saoJoaoForm.RESPOSTAS?.[question.key] === option ? ' active' : ''}`}
+                            onClick={() => handleSaoJoaoAnswerChange(question.key, option)}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+
+                      {(question.photos || []).map((photo) => {
+                        const image = saoJoaoForm.IMAGENS?.[photo.key];
+                        return (
+                          <div key={photo.key} className="sao-joao-photo-slot">
+                            <span>{photo.label}</span>
+                            <div className="image-actions">
+                              <label className="image-upload-action">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="image-upload-input"
+                                  onChange={(event) => handleSaoJoaoImageSelection(photo.key, event)}
+                                />
+                                {saoJoaoImageLoadingKey === photo.key ? 'Preparando...' : image ? 'Trocar foto' : 'Adicionar foto'}
+                              </label>
+                              {image && (
+                                <button type="button" className="shortcut-action shortcut-action-light" onClick={() => handleRemoveSaoJoaoImage(photo.key)}>
+                                  Remover
+                                </button>
+                              )}
+                            </div>
+                            {image && (
+                              <div className="image-preview-card sao-joao-preview-card">
+                                <img src={image.data_url} alt={photo.label} className="image-preview" />
+                                <div className="image-preview-copy">
+                                  <strong>{image.filename}</strong>
+                                  <span>{Math.round(image.size_bytes / 1024)} KB</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </article>
+                  ))}
+                </section>
+              ))}
+            </div>
+
+            <label className="form-field full">
+              <span>Observações</span>
+              <textarea
+                className="sao-joao-textarea"
+                value={saoJoaoForm.OBSERVACOES}
+                placeholder="Registre algo importante para a equipe."
+                onChange={(event) => handleSaoJoaoFieldChange('OBSERVACOES', event.target.value)}
+              />
+            </label>
+
+            <button type="button" className="save-action" onClick={handleSaveSaoJoaoEntry}>
+              Salvar checklist
+            </button>
+          </section>
+
+          <aside className="panel sao-joao-queue-panel">
+            <div className="panel-header">
+              <span className="panel-step">Fila local</span>
+              <strong>{pendingSaoJoaoEntries.length} pendente(s)</strong>
+              <small>Os checklists ficam no aparelho até sincronizar.</small>
+            </div>
+            <button
+              type="button"
+              className="primary-action"
+              onClick={handleSyncSaoJoaoEntries}
+              disabled={!pendingSaoJoaoEntries.length || saoJoaoSyncing || !online}
+            >
+              {saoJoaoSyncing ? 'Sincronizando...' : 'Sincronizar São João'}
+            </button>
+
+            <div className="sao-joao-entry-list">
+              {!pendingSaoJoaoEntries.length ? (
+                <div className="placeholder-card">Nenhum checklist salvo.</div>
+              ) : pendingSaoJoaoEntries.map((entry) => (
+                <article key={entry.__id} className="queue-item sao-joao-entry-card">
+                  <div>
+                    <strong>{entry.POLO_NOME || 'Polo sem nome'}</strong>
+                    <span>{entry.OPERADOR || activeOperator.name}</span>
+                    <small>{entry.LATITUDE || '-'}, {entry.LONGITUDE || '-'}</small>
+                  </div>
+                  <button type="button" className="ghost-action" onClick={() => handleRemoveSaoJoaoEntry(entry.__id)}>
+                    Remover
+                  </button>
+                </article>
+              ))}
+            </div>
+          </aside>
+        </main>
+
+        {toast && <div className="toast">{toast}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="field-app">
       <header className="hero">
@@ -2922,9 +3572,14 @@ export default function App() {
             {activeOperator.name}
             {activeOperator.can_export ? ' · Exportador' : ''}
           </span>
-          <button type="button" className="hero-logout" onClick={handleLogout}>
-            Sair
-          </button>
+          <div className="module-header-actions">
+            <button type="button" className="hero-logout" onClick={handleBackToModules}>
+              Trocar módulo
+            </button>
+            <button type="button" className="hero-logout" onClick={handleLogout}>
+              Sair
+            </button>
+          </div>
         </div>
       </header>
 
