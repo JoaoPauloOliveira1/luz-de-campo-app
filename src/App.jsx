@@ -2039,10 +2039,11 @@ export default function App() {
     if (!activeOperator) return undefined;
     let active = true;
 
-    fetchFieldModules({ includeInactive: Boolean(activeOperator.can_export) }).then((modules) => {
+    fetchFieldModules({ includeInactive: true }).then((modules) => {
       if (!active) return;
       setFieldModules(modules);
-      if (activeModule && !modules.some((module) => module.slug === activeModule)) {
+      const selectedModule = modules.find((module) => module.slug === activeModule);
+      if (activeModule && (!selectedModule || !selectedModule.active)) {
         setActiveModule(null);
         if (typeof window !== 'undefined') {
           window.localStorage.removeItem(MODULE_STORAGE_KEY);
@@ -2552,7 +2553,12 @@ export default function App() {
     }
   }, []);
 
-  const handleSelectModule = useCallback((moduleSlug) => {
+  const handleSelectModule = useCallback((module) => {
+    if (!module?.active) {
+      setToast('Módulo disponível em breve.');
+      return;
+    }
+    const moduleSlug = module.slug;
     setActiveModule(moduleSlug);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(MODULE_STORAGE_KEY, moduleSlug);
@@ -3516,12 +3522,14 @@ export default function App() {
               <button
                 key={module.slug}
                 type="button"
-                className="module-card"
-                onClick={() => handleSelectModule(module.slug)}
+                className={`module-card${module.active ? '' : ' is-disabled'}`}
+                onClick={() => handleSelectModule(module)}
+                disabled={!module.active}
+                aria-disabled={!module.active}
               >
-                <span>{module.slug === 'sao-joao' ? 'Evento' : 'Operação'}</span>
+                <span>{module.active ? (module.slug === 'sao-joao' ? 'Evento' : 'Operação') : 'Disponível em breve'}</span>
                 <strong>{module.name}</strong>
-                <small>{module.description}</small>
+                <small>{module.active ? module.description : 'Este módulo está desativado por enquanto.'}</small>
               </button>
             ))}
           </div>

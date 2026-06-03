@@ -146,6 +146,29 @@ select {
     linear-gradient(145deg, rgba(146, 64, 14, 0.95), rgba(245, 158, 11, 0.78));
 }
 
+.module-card.is-disabled,
+.module-card:disabled {
+  cursor: not-allowed;
+  color: rgba(37, 55, 83, 0.7);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.5), transparent 24%),
+    linear-gradient(145deg, rgba(226, 232, 240, 0.96), rgba(203, 213, 225, 0.74));
+  box-shadow: 0 14px 30px rgba(71, 85, 105, 0.12);
+  opacity: 0.72;
+  filter: grayscale(0.85);
+}
+
+.module-card.is-disabled span,
+.module-card:disabled span {
+  background: rgba(100, 116, 139, 0.13);
+  color: #475569;
+}
+
+.module-card.is-disabled small,
+.module-card:disabled small {
+  color: #64748b;
+}
+
 .module-card span {
   width: max-content;
   padding: 6px 10px;
