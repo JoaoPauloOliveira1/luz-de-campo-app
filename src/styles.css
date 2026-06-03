@@ -1277,6 +1277,63 @@ select {
   flex-wrap: wrap;
 }
 
+.manager-table-intro {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.manager-table-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.manager-module-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-module-tab {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  border: 1px solid rgba(11, 47, 109, 0.14);
+  border-radius: 16px;
+  padding: 9px 12px;
+  background: rgba(238, 244, 252, 0.9);
+  color: var(--blue);
+  text-align: left;
+  cursor: pointer;
+}
+
+.manager-module-tab strong {
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.manager-module-tab span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.manager-module-tab.is-active {
+  border-color: rgba(24, 67, 143, 0.36);
+  background: linear-gradient(135deg, var(--blue), var(--blue-soft));
+  color: white;
+  box-shadow: 0 14px 34px rgba(24, 67, 143, 0.2);
+}
+
+.manager-module-tab.is-active strong,
+.manager-module-tab.is-active span {
+  color: white;
+}
+
 .manager-pdf-button {
   min-height: 34px;
   padding: 8px 14px;

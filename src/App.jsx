@@ -380,6 +380,37 @@ const SAO_JOAO_QUESTIONS = [
 ];
 
 const SAO_JOAO_PHOTO_FIELDS = SAO_JOAO_QUESTIONS.flatMap((group) => group.items.flatMap((item) => item.photos || []));
+const SAO_JOAO_QUESTION_ITEMS = SAO_JOAO_QUESTIONS.flatMap((group) => group.items);
+const SAO_JOAO_QUESTION_BY_KEY = Object.fromEntries(SAO_JOAO_QUESTION_ITEMS.map((question) => [question.key, question]));
+const SAO_JOAO_PHOTO_BY_KEY = Object.fromEntries(SAO_JOAO_PHOTO_FIELDS.map((photo) => [photo.key, photo]));
+const SAO_JOAO_EXPORT_FIELDS = [
+  'POLO_NOME',
+  'OPERADOR',
+  'LATITUDE',
+  'LONGITUDE',
+  'OBSERVACOES',
+  ...SAO_JOAO_QUESTION_ITEMS.map((question) => question.key),
+  ...SAO_JOAO_PHOTO_FIELDS.map((photo) => photo.key),
+  'LINKS_IMAGENS',
+  'SYNCED_EM',
+];
+const SAO_JOAO_MANAGER_COMPACT_TABLE_FIELDS = [
+  'POLO_NOME',
+  'OPERADOR',
+  'LATITUDE',
+  'LONGITUDE',
+  'TEM_IMAGEM',
+  'SYNCED_EM',
+];
+const SAO_JOAO_MANAGER_DETAIL_ONLY_FIELDS = SAO_JOAO_EXPORT_FIELDS.filter((field) => !SAO_JOAO_MANAGER_COMPACT_TABLE_FIELDS.includes(field));
+
+function getManagerFieldLabel(field) {
+  if (SAO_JOAO_QUESTION_BY_KEY[field]) return SAO_JOAO_QUESTION_BY_KEY[field].label;
+  if (SAO_JOAO_PHOTO_BY_KEY[field]) return SAO_JOAO_PHOTO_BY_KEY[field].label;
+  if (field === 'POLO_NOME') return 'Polo';
+  if (field === 'OBSERVACOES') return 'Observações';
+  return MANAGER_FIELD_LABELS[field] || field;
+}
 
 function clampLuminaireCount(value) {
   const parsed = Number.parseInt(String(value ?? '').trim(), 10);
@@ -496,6 +527,17 @@ function exportWorkbook(rows) {
   XLSX.writeFileXLSX(workbook, `luz_de_campo_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
+function exportSaoJoaoWorkbook(rows) {
+  const formattedRows = rows.map((row) => buildSaoJoaoExportRow(row));
+  const worksheet = XLSX.utils.json_to_sheet(
+    formattedRows.map((row) => Object.fromEntries(SAO_JOAO_EXPORT_FIELDS.map((field) => [getManagerFieldLabel(field), row[field] ?? '']))),
+    { header: SAO_JOAO_EXPORT_FIELDS.map(getManagerFieldLabel) }
+  );
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'SaoJoao');
+  XLSX.writeFileXLSX(workbook, `vistoria_sao_joao_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function buildExportRow(row) {
   const luminarias = normalizeLuminaireItems(
     row?.LUMINARIAS ?? row?.luminarias ?? row?.luminarias_json,
@@ -554,6 +596,38 @@ function buildExportRow(row) {
       ?? imageLinksByLuminaire[String(columnIndex)]
       ?? '';
   }
+
+  return exportRow;
+}
+
+function buildSaoJoaoExportRow(row) {
+  const respostas = row?.respostas || row?.RESPOSTAS || {};
+  const imageLinksByField = row?.image_links_by_field || {};
+  const imageLinks = Array.isArray(row?.image_links)
+    ? row.image_links
+    : String(row?.LINKS_IMAGENS ?? '')
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  const exportRow = {
+    POLO_NOME: row?.POLO_NOME ?? row?.polo_nome ?? '',
+    OPERADOR: row?.OPERADOR ?? row?.operador ?? '',
+    LATITUDE: row?.LATITUDE ?? row?.latitude ?? '',
+    LONGITUDE: row?.LONGITUDE ?? row?.longitude ?? '',
+    OBSERVACOES: row?.OBSERVACOES ?? row?.observacoes ?? '',
+    TEM_IMAGEM: row?.TEM_IMAGEM ?? (row?.tem_imagem ? 'SIM' : imageLinks.length ? 'SIM' : 'NÃO'),
+    LINKS_IMAGENS: row?.LINKS_IMAGENS ?? imageLinks.join('\n'),
+    SYNCED_EM: row?.SYNCED_EM ?? row?.synced_em ?? '',
+  };
+
+  SAO_JOAO_QUESTION_ITEMS.forEach((question) => {
+    exportRow[question.key] = respostas[question.key] ?? '';
+  });
+
+  SAO_JOAO_PHOTO_FIELDS.forEach((photo) => {
+    exportRow[photo.key] = imageLinksByField[photo.key] ?? '';
+  });
 
   return exportRow;
 }
@@ -1673,6 +1747,22 @@ async function fetchSubmissionExport(scope) {
   return response.json();
 }
 
+async function fetchSaoJoaoSummary() {
+  const response = await fetch(`${FIELD_API_BASE_URL}/sao-joao-submissions/summary`);
+  if (!response.ok) {
+    throw new Error('Não foi possível carregar o resumo do São João.');
+  }
+  return response.json();
+}
+
+async function fetchSaoJoaoExport() {
+  const response = await fetch(`${FIELD_API_BASE_URL}/sao-joao-submissions/export`);
+  if (!response.ok) {
+    throw new Error('Não foi possível carregar as vistorias do São João.');
+  }
+  return response.json();
+}
+
 async function markSubmissionsExported(clientUuids, exportedByOperatorId) {
   const response = await fetch(`${FIELD_API_BASE_URL}/field-submissions/mark-exported`, {
     method: 'POST',
@@ -1805,6 +1895,7 @@ export default function App() {
   const [managerRows, setManagerRows] = useState([]);
   const [managerRowsLoading, setManagerRowsLoading] = useState(false);
   const [selectedManagerRowIds, setSelectedManagerRowIds] = useState([]);
+  const [activeManagerModule, setActiveManagerModule] = useState('implantacao-obra');
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
@@ -2384,6 +2475,15 @@ export default function App() {
     setManagerTableFilters((current) => ({ ...current, [field]: value }));
   }, []);
 
+  const handleActiveManagerModuleChange = useCallback((moduleSlug) => {
+    setActiveManagerModule(moduleSlug);
+    setManagerRows([]);
+    setManagerTableFilters({});
+    setSelectedManagerRowIds([]);
+    setManagerEditingClientUuid('');
+    setManagerEditDraft({});
+  }, []);
+
   const handleLogin = useCallback(async (event) => {
     event.preventDefault();
 
@@ -2692,20 +2792,24 @@ export default function App() {
     if (!activeOperator?.can_export) return;
     setManagerLoading(true);
     try {
-      const summary = await fetchSubmissionSummary();
+      const summary = activeManagerModule === 'sao-joao'
+        ? await fetchSaoJoaoSummary()
+        : await fetchSubmissionSummary();
       setManagerSummary(summary);
     } catch (error) {
       setToast(error.message || 'Não foi possível carregar o resumo gerencial.');
     } finally {
       setManagerLoading(false);
     }
-  }, [activeOperator, setToast]);
+  }, [activeManagerModule, activeOperator, setToast]);
 
   const loadManagerRows = useCallback(async () => {
     if (!activeOperator?.can_export) return;
     setManagerRowsLoading(true);
     try {
-      const rows = await fetchSubmissionExport('all');
+      const rows = activeManagerModule === 'sao-joao'
+        ? await fetchSaoJoaoExport()
+        : await fetchSubmissionExport('all');
       setManagerRows(rows);
       setSelectedManagerRowIds((current) => {
         const availableIds = new Set(rows.map(getManagerRowId));
@@ -2716,7 +2820,7 @@ export default function App() {
     } finally {
       setManagerRowsLoading(false);
     }
-  }, [activeOperator, setToast]);
+  }, [activeManagerModule, activeOperator, setToast]);
 
   useEffect(() => {
     if (!activeOperator?.can_export) return;
@@ -2789,6 +2893,10 @@ export default function App() {
 
   const handleDeleteManagerRow = useCallback(async (row) => {
     if (!activeOperator?.can_export) return;
+    if (activeManagerModule === 'sao-joao') {
+      setToast('Vistorias do São João ficam separadas e não são excluídas por esta ação.');
+      return;
+    }
     if (!managerUserForm.managerAccessCode.trim()) {
       setToast('Informe o código gerencial antes de excluir pontos.');
       return;
@@ -2815,7 +2923,7 @@ export default function App() {
     } finally {
       setManagerRowActionId('');
     }
-  }, [activeOperator, loadManagerRows, loadManagerSummary, managerUserForm.managerAccessCode]);
+  }, [activeManagerModule, activeOperator, loadManagerRows, loadManagerSummary, managerUserForm.managerAccessCode]);
 
   const handleToggleManagerModule = useCallback(async (module) => {
     if (!activeOperator?.can_export) return;
@@ -2933,7 +3041,7 @@ export default function App() {
     <div className="manager-detail-grid">
       {fields.map((field) => (
         <div key={field} className="manager-detail-item">
-          <span className="manager-detail-label">{MANAGER_FIELD_LABELS[field] || field}</span>
+          <span className="manager-detail-label">{getManagerFieldLabel(field)}</span>
           <div className="manager-detail-value">
             {renderManagerTableCell(field, exportRow, isEditing)}
           </div>
@@ -2942,18 +3050,42 @@ export default function App() {
     </div>
   ), [renderManagerTableCell]);
 
+  const activeManagerCompactFields = activeManagerModule === 'sao-joao'
+    ? SAO_JOAO_MANAGER_COMPACT_TABLE_FIELDS
+    : MANAGER_COMPACT_TABLE_FIELDS;
+  const activeManagerDetailFields = activeManagerModule === 'sao-joao'
+    ? SAO_JOAO_MANAGER_DETAIL_ONLY_FIELDS
+    : MANAGER_DETAIL_ONLY_FIELDS;
+  const managerIsSaoJoao = activeManagerModule === 'sao-joao';
+  const activeManagerModuleConfig = fieldModules.find((module) => module.slug === activeManagerModule)
+    || DEFAULT_FIELD_MODULES.find((module) => module.slug === activeManagerModule)
+    || DEFAULT_FIELD_MODULES[0];
+  const managerModuleName = activeManagerModuleConfig?.name || 'Implantacao/Obra';
+  const managerTableTitle = managerIsSaoJoao ? 'Vistorias registradas' : 'Pontos registrados';
+  const managerTableDescription = managerIsSaoJoao
+    ? 'Revise as vistorias do Sao Joao. Estes dados ficam separados do Cadastro Editor.'
+    : 'Revise, edite ou exclua os pontos sincronizados antes de usar no Cadastro Editor.';
+  const managerTableEmptyMessage = managerIsSaoJoao
+    ? 'Nenhuma vistoria do Sao Joao registrada no banco.'
+    : 'Nenhum ponto registrado no banco.';
+  const managerRowsLoadingMessage = managerIsSaoJoao
+    ? 'Carregando vistorias registradas...'
+    : 'Carregando pontos registrados...';
+  const managerExportAllLabel = managerIsSaoJoao ? 'Baixar vistorias' : 'Baixar historico completo';
+  const managerSelectionLabel = managerIsSaoJoao ? 'vistoria(s)' : 'selecionado(s)';
+
   const managerTableRows = useMemo(() => managerRows
     .map((row, index) => ({
       row,
       index,
-      exportRow: buildExportRow(row),
+      exportRow: managerIsSaoJoao ? buildSaoJoaoExportRow(row) : buildExportRow(row),
       clientUuid: row.client_uuid || row.CLIENT_UUID || '',
     }))
-    .filter(({ exportRow }) => MANAGER_COMPACT_TABLE_FIELDS.every((field) => {
+    .filter(({ exportRow }) => activeManagerCompactFields.every((field) => {
       const filter = (managerTableFilters[field] || '').trim().toLowerCase();
       if (!filter) return true;
       return formatManagerCellValue(exportRow[field]).toLowerCase().includes(filter);
-    })), [managerRows, managerTableFilters]);
+    })), [activeManagerCompactFields, managerIsSaoJoao, managerRows, managerTableFilters]);
 
   const selectedManagerIdSet = useMemo(
     () => new Set(selectedManagerRowIds),
@@ -3195,6 +3327,18 @@ export default function App() {
 
     try {
       setManagerLoading(true);
+      if (managerIsSaoJoao) {
+        const rows = await fetchSaoJoaoExport();
+        if (!rows.length) {
+          setToast('Não há vistorias do São João para exportar.');
+          return;
+        }
+
+        exportSaoJoaoWorkbook(rows);
+        setToast(`${rows.length} vistoria(s) do São João exportada(s).`);
+        return;
+      }
+
       const rows = await fetchSubmissionExport(scope);
       if (!rows.length) {
         setToast(scope === 'pending' ? 'Não há registros pendentes para exportar.' : 'Não há registros para exportar.');
@@ -3218,7 +3362,7 @@ export default function App() {
     } finally {
       setManagerLoading(false);
     }
-  }, [activeOperator, loadManagerSummary]);
+  }, [activeOperator, loadManagerSummary, managerIsSaoJoao]);
 
   const handleToggleManagerRowSelection = useCallback((rowId) => {
     if (!rowId) return;
@@ -3239,6 +3383,10 @@ export default function App() {
   }, [managerTableRows, selectedManagerRows.length]);
 
   const handleGenerateManagerPdf = useCallback(async () => {
+    if (managerIsSaoJoao) {
+      setToast('PDF gerencial fica disponível apenas para Implantação/Obra.');
+      return;
+    }
     if (!selectedManagerRows.length) {
       setToast('Selecione pelo menos um ponto na tabela para gerar o PDF.');
       return;
@@ -3253,7 +3401,7 @@ export default function App() {
     } finally {
       setManagerLoading(false);
     }
-  }, [selectedManagerRows]);
+  }, [managerIsSaoJoao, selectedManagerRows]);
 
   const handleSyncSingleEntry = useCallback(async (entry) => {
     if (!isEntryReadyToSync(entry)) {
@@ -3401,41 +3549,47 @@ export default function App() {
           <section className="panel manager-panel manager-summary-panel">
             <div className="panel-header">
               <span className="panel-step">Gestão</span>
-              <strong>Visão dos registros sincronizados</strong>
-              <small>Baixe apenas os pendentes ou gere uma planilha completa do histórico.</small>
+              <strong>{managerIsSaoJoao ? 'Visão das vistorias do São João' : 'Visão dos registros sincronizados'}</strong>
+              <small>
+                {managerIsSaoJoao
+                  ? 'Módulo de vistoria separado: não envia pontos ao Cadastro Editor.'
+                  : 'Baixe apenas os pendentes ou gere uma planilha completa do histórico.'}
+              </small>
             </div>
 
             <div className="manager-stats">
               <article className="manager-stat-card">
                 <strong>{managerSummary.total}</strong>
-                <span>Total no banco</span>
+                <span>{managerIsSaoJoao ? 'Total de vistorias' : 'Total no banco'}</span>
               </article>
               <article className="manager-stat-card">
-                <strong>{managerSummary.pending_export}</strong>
-                <span>Ainda não exportados</span>
+                <strong>{managerIsSaoJoao ? 'Sim' : managerSummary.pending_export}</strong>
+                <span>{managerIsSaoJoao ? 'Separado do Cadastro Editor' : 'Ainda não exportados'}</span>
               </article>
               <article className="manager-stat-card">
-                <strong>{managerSummary.exported}</strong>
-                <span>Já exportados</span>
+                <strong>{managerIsSaoJoao ? 'Planilha' : managerSummary.exported}</strong>
+                <span>{managerIsSaoJoao ? 'Exportação gerencial' : 'Já exportados'}</span>
               </article>
             </div>
 
             <div className="manager-actions">
+              {!managerIsSaoJoao && (
+                <button
+                  type="button"
+                  className="primary-action"
+                  onClick={() => handleManagerExport('pending')}
+                  disabled={managerLoading || managerSummary.pending_export === 0}
+                >
+                  {managerLoading ? 'Processando...' : 'Baixar pendentes'}
+                </button>
+              )}
               <button
                 type="button"
-                className="primary-action"
-                onClick={() => handleManagerExport('pending')}
-                disabled={managerLoading || managerSummary.pending_export === 0}
-              >
-                {managerLoading ? 'Processando...' : 'Baixar pendentes'}
-              </button>
-              <button
-                type="button"
-                className="ghost-action"
+                className={managerIsSaoJoao ? 'primary-action' : 'ghost-action'}
                 onClick={() => handleManagerExport('all')}
                 disabled={managerLoading || managerSummary.total === 0}
               >
-                Baixar histórico completo
+                {managerLoading ? 'Processando...' : managerExportAllLabel}
               </button>
             </div>
 
@@ -3481,18 +3635,22 @@ export default function App() {
             <div className="panel-header">
               <div>
                 <span className="panel-step">Registros</span>
-                <strong>Pontos registrados</strong>
-                <small>{managerTableRows.length} linha(s) no recorte ativo · {selectedManagerRows.length} selecionado(s)</small>
+                <strong>{managerTableTitle}</strong>
+                <small>
+                  {managerTableRows.length} linha(s) em {managerModuleName} · {managerIsSaoJoao ? 'tabela de vistoria' : `${selectedManagerRows.length} ${managerSelectionLabel}`}
+                </small>
               </div>
               <div className="manager-table-header-actions">
-                <button
-                  type="button"
-                  className="primary-action manager-pdf-button"
-                  onClick={handleGenerateManagerPdf}
-                  disabled={!selectedManagerRows.length || managerLoading}
-                >
-                  {managerLoading ? 'Gerando PDF...' : `Gerar PDF (${selectedManagerRows.length})`}
-                </button>
+                {!managerIsSaoJoao && (
+                  <button
+                    type="button"
+                    className="primary-action manager-pdf-button"
+                    onClick={handleGenerateManagerPdf}
+                    disabled={!selectedManagerRows.length || managerLoading}
+                  >
+                    {managerLoading ? 'Gerando PDF...' : `Gerar PDF (${selectedManagerRows.length})`}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="manager-maximize-button"
@@ -3503,34 +3661,55 @@ export default function App() {
               </div>
             </div>
 
+            <div className="manager-table-intro">
+              <p>{managerTableDescription}</p>
+              <div className="manager-module-tabs" role="tablist" aria-label="Selecionar módulo gerencial">
+                {fieldModules.map((module) => (
+                  <button
+                    key={module.slug}
+                    type="button"
+                    className={`manager-module-tab${activeManagerModule === module.slug ? ' is-active' : ''}`}
+                    onClick={() => handleActiveManagerModuleChange(module.slug)}
+                    role="tab"
+                    aria-selected={activeManagerModule === module.slug}
+                  >
+                    <strong>{module.name}</strong>
+                    <span>{module.active ? 'Ativo' : 'Inativo'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {managerRowsLoading ? (
-              <div className="placeholder-card">Carregando pontos registrados...</div>
+              <div className="placeholder-card">{managerRowsLoadingMessage}</div>
             ) : managerRows.length === 0 ? (
-              <div className="placeholder-card">Nenhum ponto registrado no banco.</div>
+              <div className="placeholder-card">{managerTableEmptyMessage}</div>
             ) : (
               <div className="manager-table-scroll">
                 <table className="manager-submission-table">
                   <thead>
                     <tr>
-                      <th className="manager-table-select-col">
-                        <input
-                          type="checkbox"
-                          checked={allManagerRowsSelected}
-                          onChange={handleToggleAllManagerRowsSelection}
-                          aria-label="Selecionar todos os pontos do recorte"
-                        />
-                      </th>
+                      {!managerIsSaoJoao && (
+                        <th className="manager-table-select-col">
+                          <input
+                            type="checkbox"
+                            checked={allManagerRowsSelected}
+                            onChange={handleToggleAllManagerRowsSelection}
+                            aria-label="Selecionar todos os pontos do recorte"
+                          />
+                        </th>
+                      )}
                       <th>Item</th>
-                      {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
-                        <th key={field}>{MANAGER_FIELD_LABELS[field] || field}</th>
+                      {activeManagerCompactFields.map((field) => (
+                        <th key={field}>{getManagerFieldLabel(field)}</th>
                       ))}
                       <th>Detalhes</th>
-                      <th className="manager-table-actions-col">Ações</th>
+                      {!managerIsSaoJoao && <th className="manager-table-actions-col">Ações</th>}
                     </tr>
                     <tr className="manager-table-filter-row">
+                      {!managerIsSaoJoao && <th />}
                       <th />
-                      <th />
-                      {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
+                      {activeManagerCompactFields.map((field) => (
                         <th key={`filter-${field}`}>
                           <input
                             value={managerTableFilters[field] || ''}
@@ -3540,7 +3719,7 @@ export default function App() {
                         </th>
                       ))}
                       <th />
-                      <th />
+                      {!managerIsSaoJoao && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -3550,50 +3729,54 @@ export default function App() {
                       const isSelected = selectedManagerIdSet.has(rowClientUuid);
                       return (
                         <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`} className={isSelected ? 'is-selected' : ''}>
-                          <td data-label="PDF" className="manager-table-select-cell">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
-                              disabled={!rowClientUuid}
-                              aria-label={`Selecionar ponto ${index + 1} para PDF`}
-                            />
-                          </td>
+                          {!managerIsSaoJoao && (
+                            <td data-label="PDF" className="manager-table-select-cell">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
+                                disabled={!rowClientUuid}
+                                aria-label={`Selecionar ponto ${index + 1} para PDF`}
+                              />
+                            </td>
+                          )}
                           <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
-                          {MANAGER_COMPACT_TABLE_FIELDS.map((field) => (
-                            <td key={field} data-label={MANAGER_FIELD_LABELS[field] || field}>
+                          {activeManagerCompactFields.map((field) => (
+                            <td key={field} data-label={getManagerFieldLabel(field)}>
                               {renderManagerTableCell(field, exportRow, isEditing)}
                             </td>
                           ))}
                           <td data-label="Detalhes" className="manager-table-details-cell">
                             <details className="manager-row-details">
                               <summary>Ver dados</summary>
-                              {renderManagerDetailGroup(MANAGER_DETAIL_ONLY_FIELDS, exportRow, isEditing)}
+                              {renderManagerDetailGroup(activeManagerDetailFields, exportRow, isEditing)}
                             </details>
                           </td>
-                          <td data-label="Ações" className="manager-table-actions-cell">
-                            <div className="manager-table-actions">
-                              {isEditing ? (
-                                <>
-                                  <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(rowClientUuid)} disabled={managerRowActionId === rowClientUuid}>
-                                    Salvar
-                                  </button>
-                                  <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === rowClientUuid}>
-                                    Cancelar
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
-                                    Editar
-                                  </button>
-                                  <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === rowClientUuid || !rowClientUuid}>
-                                    Excluir
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                          {!managerIsSaoJoao && (
+                            <td data-label="Ações" className="manager-table-actions-cell">
+                              <div className="manager-table-actions">
+                                {isEditing ? (
+                                  <>
+                                    <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(rowClientUuid)} disabled={managerRowActionId === rowClientUuid}>
+                                      Salvar
+                                    </button>
+                                    <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === rowClientUuid}>
+                                      Cancelar
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
+                                      Editar
+                                    </button>
+                                    <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === rowClientUuid || !rowClientUuid}>
+                                      Excluir
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
