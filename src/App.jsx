@@ -1977,6 +1977,7 @@ export default function App() {
   const [activeModule, setActiveModule] = useState(() => getStoredModule());
   const [fieldModules, setFieldModules] = useState(DEFAULT_FIELD_MODULES);
   const [accessForm, setAccessForm] = useState({ operatorId: '', accessCode: '', offlineRpas: [] });
+  const [operatorSearchText, setOperatorSearchText] = useState('');
   const [authError, setAuthError] = useState('');
   const [authInfo, setAuthInfo] = useState('');
   const [allowedOperators, setAllowedOperators] = useState([]);
@@ -2048,6 +2049,19 @@ export default function App() {
       return accumulator;
     }, {});
   }, [activeOperator, entries]);
+
+  const filteredAllowedOperators = useMemo(() => {
+    const query = operatorSearchText.trim().toLowerCase();
+    if (!query) return allowedOperators;
+    return allowedOperators.filter((operator) => (
+      String(operator.name || '').toLowerCase().includes(query)
+    ));
+  }, [allowedOperators, operatorSearchText]);
+
+  const selectedLoginOperator = useMemo(
+    () => allowedOperators.find((operator) => String(operator.id) === String(accessForm.operatorId)) || null,
+    [accessForm.operatorId, allowedOperators]
+  );
 
   const operatorEntries = useMemo(
     () => entries.filter((entry) => entry.OPERADOR_ID === activeOperator?.id),
@@ -2339,6 +2353,11 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
+    if (!selectedLoginOperator || operatorSearchText) return;
+    setOperatorSearchText(selectedLoginOperator.name || '');
+  }, [operatorSearchText, selectedLoginOperator]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(entries));
   }, [entries]);
@@ -2605,6 +2624,20 @@ export default function App() {
     setAuthInfo('');
   }, []);
 
+  const handleOperatorSearchChange = useCallback((value) => {
+    setOperatorSearchText(value);
+    setAccessForm((current) => ({ ...current, operatorId: '' }));
+    setAuthError('');
+    setAuthInfo('');
+  }, []);
+
+  const handleSelectLoginOperator = useCallback((operator) => {
+    setAccessForm((current) => ({ ...current, operatorId: String(operator.id) }));
+    setOperatorSearchText(operator.name || '');
+    setAuthError('');
+    setAuthInfo('');
+  }, []);
+
   const handleToggleOfflineRpa = useCallback((rpa) => {
     setAccessForm((current) => {
       const currentValues = current.offlineRpas || [];
@@ -2646,6 +2679,11 @@ export default function App() {
     try {
       const trimmedAccessCode = accessForm.accessCode.trim();
       const selectedOfflineRpas = accessForm.offlineRpas || [];
+      if (!accessForm.operatorId) {
+        setAuthError('Digite o nome e selecione um usuário da lista.');
+        setAuthInfo('');
+        return;
+      }
       const loggedOperator = online
         ? await loginFieldOperator(accessForm.operatorId, trimmedAccessCode)
         : await loginOfflineOperator(accessForm.operatorId, trimmedAccessCode);
@@ -2661,6 +2699,7 @@ export default function App() {
       setActiveOperator(loggedOperator);
       setActiveModule(null);
       setAuthError('');
+      setOperatorSearchText(loggedOperator.name || '');
       setAccessForm({ operatorId: String(loggedOperator.id), accessCode: '', offlineRpas: selectedOfflineRpas });
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(
@@ -2686,6 +2725,7 @@ export default function App() {
     setActiveOperator(null);
     setActiveModule(null);
     setAccessForm({ operatorId: '', accessCode: '', offlineRpas: [] });
+    setOperatorSearchText('');
     setAuthError('');
     setAuthInfo('');
     setStep('location');
@@ -3750,23 +3790,31 @@ export default function App() {
           <h1>Acesso de equipe</h1>
 
           <form className="auth-form" onSubmit={handleLogin}>
-            <label className="form-field full">
+            <div className="form-field full auth-operator-search">
               <span>Usuário autorizado</span>
-              <select
-                value={accessForm.operatorId}
+              <input
+                type="text"
+                value={operatorSearchText}
                 disabled={authLoading}
-                onChange={(event) => handleAccessFieldChange('operatorId', event.target.value)}
-              >
-                <option value="">
-                  {authLoading ? 'Carregando usuários...' : 'Selecione o usuário'}
-                </option>
-                {allowedOperators.map((operator) => (
-                  <option key={operator.id} value={operator.id}>
+                placeholder={authLoading ? 'Carregando usuários...' : 'Digite o nome do usuário'}
+                onChange={(event) => handleOperatorSearchChange(event.target.value)}
+              />
+              <div className="auth-operator-results" role="listbox" aria-label="Usuários encontrados">
+                {filteredAllowedOperators.slice(0, 6).map((operator) => (
+                  <button
+                    key={operator.id}
+                    type="button"
+                    className={`auth-operator-option${String(accessForm.operatorId) === String(operator.id) ? ' is-selected' : ''}`}
+                    onClick={() => handleSelectLoginOperator(operator)}
+                  >
                     {operator.name}
-                  </option>
+                  </button>
                 ))}
-              </select>
-            </label>
+                {!authLoading && operatorSearchText.trim() && filteredAllowedOperators.length === 0 && (
+                  <small>Nenhum usuário encontrado com esse nome.</small>
+                )}
+              </div>
+            </div>
 
             <label className="form-field full">
               <span>Codigo de acesso</span>
