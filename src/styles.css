@@ -1357,6 +1357,29 @@ select {
   color: white;
 }
 
+.manager-date-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-date-filter {
+  border: 1px solid rgba(11, 47, 109, 0.14);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(248, 250, 254, 0.94);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.manager-date-filter.is-active {
+  border-color: rgba(24, 67, 143, 0.34);
+  background: rgba(24, 67, 143, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(24, 67, 143, 0.1);
+}
+
 .manager-pdf-button {
   min-height: 34px;
   padding: 8px 14px;
@@ -1472,6 +1495,43 @@ select {
 
 .manager-submission-table tbody tr.is-selected td {
   background: rgba(24, 67, 143, 0.08);
+}
+
+.manager-date-group-row td {
+  padding: 0;
+  background: rgba(229, 237, 250, 0.96);
+}
+
+.manager-date-group-button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 10px 12px;
+  background:
+    linear-gradient(135deg, rgba(24, 67, 143, 0.12), rgba(255, 255, 255, 0.7));
+  color: var(--blue);
+  text-align: left;
+  cursor: pointer;
+}
+
+.manager-date-group-button strong {
+  font-size: 14px;
+  color: var(--blue);
+}
+
+.manager-date-group-button span {
+  display: inline-flex;
+  margin: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #34527a;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .manager-table-filter-row th {
@@ -1671,6 +1731,35 @@ select {
 
 .queue-counter span {
   color: var(--muted);
+}
+
+.queue-history-counter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: max-content;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(236, 253, 245, 0.9);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.queue-history-counter strong {
+  color: #166534;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.queue-history-counter span,
+.queue-history-counter small {
+  color: #166534;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.queue-history-counter small {
+  opacity: 0.76;
 }
 
 .queue-filters {

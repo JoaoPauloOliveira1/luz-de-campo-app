@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as XLSX from 'xlsx';
 import { RECIFE_BOUNDARY } from './data/recifeBoundary.js';
@@ -227,6 +227,7 @@ const SESSION_STORAGE_KEY = 'luz-de-campo-session';
 const MODULE_STORAGE_KEY = 'luz-de-campo-active-module';
 const QUEUE_STORAGE_KEY = 'luz-de-campo-queue';
 const SAO_JOAO_QUEUE_STORAGE_KEY = 'luz-de-campo-sao-joao-queue';
+const SENT_STATS_STORAGE_KEY = 'luz-de-campo-sent-stats';
 const LOCATION_CONTEXT_CACHE_KEY = 'luz-de-campo-location-context';
 const OFFLINE_ACCESS_STORAGE_KEY = 'luz-de-campo-offline-access';
 const OPERATORS_CACHE_STORAGE_KEY = 'luz-de-campo-operators-cache';
@@ -547,6 +548,53 @@ function downloadJsonFile(filename, payload) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getDateKey(value) {
+  const date = parseDateValue(value);
+  return date ? date.toISOString().slice(0, 10) : 'sem-data';
+}
+
+function formatDateKeyForDisplay(dateKey) {
+  if (dateKey === 'sem-data') return 'Sem data';
+  const [year, month, day] = dateKey.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function isDateWithinScope(dateKey, scope) {
+  if (scope === 'all' || dateKey === 'sem-data') return true;
+  const date = parseDateValue(`${dateKey}T12:00:00`);
+  if (!date) return true;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (scope === 'today') {
+    return startOfDate.getTime() === startOfToday.getTime();
+  }
+
+  if (scope === '7d') {
+    const sevenDaysAgo = new Date(startOfToday);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    return startOfDate >= sevenDaysAgo;
+  }
+
+  if (scope === 'month') {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  }
+
+  return true;
+}
+
+function getManagerRowDateKey(exportRow) {
+  return getDateKey(exportRow.SYNCED_EM || exportRow.ATUALIZACAO || exportRow.DATA_ATUALIZACAO_DEIL);
 }
 
 function buildExportRow(row) {
@@ -1184,6 +1232,19 @@ function getStoredSaoJoaoQueue() {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function getStoredSentStats() {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const rawStats = window.localStorage.getItem(SENT_STATS_STORAGE_KEY);
+    if (!rawStats) return {};
+    const parsed = JSON.parse(rawStats);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 
@@ -1935,6 +1996,8 @@ export default function App() {
   const [managerEditingClientUuid, setManagerEditingClientUuid] = useState('');
   const [managerEditDraft, setManagerEditDraft] = useState({});
   const [managerTableFilters, setManagerTableFilters] = useState({});
+  const [managerDateScope, setManagerDateScope] = useState('7d');
+  const [expandedManagerDateGroups, setExpandedManagerDateGroups] = useState([]);
   const [managerTableMaximized, setManagerTableMaximized] = useState(false);
   const [managerUsersCollapsed, setManagerUsersCollapsed] = useState(true);
   const [managerRowActionId, setManagerRowActionId] = useState('');
@@ -1953,6 +2016,7 @@ export default function App() {
   const [saoJoaoEntries, setSaoJoaoEntries] = useState(() => getStoredSaoJoaoQueue());
   const [saoJoaoSyncing, setSaoJoaoSyncing] = useState(false);
   const [saoJoaoImageLoadingKey, setSaoJoaoImageLoadingKey] = useState('');
+  const [sentStats, setSentStats] = useState(() => getStoredSentStats());
 
   const canConfirmLocation = useMemo(
     () => Number.isFinite(draftPosition?.lat) && Number.isFinite(draftPosition?.lng),
@@ -1998,6 +2062,11 @@ export default function App() {
     () => operatorEntries.filter((entry) => entry.__syncStatus === 'synced'),
     [operatorEntries]
   );
+  const archivedSentCount = useMemo(() => {
+    const operatorKey = String(activeOperator?.id || 'sem-operador');
+    return Number(sentStats?.[operatorKey]?.total || 0);
+  }, [activeOperator, sentStats]);
+  const totalSentByOperator = archivedSentCount + syncedOperatorEntries.length;
   const errorOperatorEntries = useMemo(
     () => operatorEntries.filter((entry) => entry.__syncStatus === 'error'),
     [operatorEntries]
@@ -2275,6 +2344,40 @@ export default function App() {
   }, [entries]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SENT_STATS_STORAGE_KEY, JSON.stringify(sentStats));
+  }, [sentStats]);
+
+  useEffect(() => {
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const expiredSyncedEntries = entries.filter((entry) => {
+      if (entry.__syncStatus !== 'synced' || !entry.__syncedAt) return false;
+      const syncedAt = new Date(entry.__syncedAt).getTime();
+      return Number.isFinite(syncedAt) && syncedAt < sevenDaysAgo;
+    });
+
+    if (!expiredSyncedEntries.length) return;
+
+    setSentStats((current) => {
+      const next = { ...current };
+      expiredSyncedEntries.forEach((entry) => {
+        const operatorKey = String(entry.OPERADOR_ID || 'sem-operador');
+        const previous = next[operatorKey] || { total: 0 };
+        next[operatorKey] = {
+          ...previous,
+          total: Number(previous.total || 0) + 1,
+          lastArchivedAt: new Date().toISOString(),
+        };
+      });
+      return next;
+    });
+
+    setEntries((current) => current.filter((entry) => (
+      !expiredSyncedEntries.some((expired) => expired.__id === entry.__id)
+    )));
+  }, [entries]);
+
+  useEffect(() => {
     function handleOnline() {
       setOnline(true);
     }
@@ -2530,6 +2633,8 @@ export default function App() {
     setActiveManagerModule(moduleSlug);
     setManagerRows([]);
     setManagerTableFilters({});
+    setManagerDateScope('7d');
+    setExpandedManagerDateGroups([]);
     setSelectedManagerRowIds([]);
     setManagerEditingClientUuid('');
     setManagerEditDraft({});
@@ -3200,17 +3305,49 @@ export default function App() {
   const managerSelectionLabel = managerIsSaoJoao ? 'vistoria(s)' : 'selecionado(s)';
 
   const managerTableRows = useMemo(() => managerRows
-    .map((row, index) => ({
-      row,
-      index,
-      exportRow: managerIsSaoJoao ? buildSaoJoaoExportRow(row) : buildExportRow(row),
-      clientUuid: row.client_uuid || row.CLIENT_UUID || '',
-    }))
+    .map((row, index) => {
+      const exportRow = managerIsSaoJoao ? buildSaoJoaoExportRow(row) : buildExportRow(row);
+      return {
+        row,
+        index,
+        exportRow,
+        dateKey: getManagerRowDateKey(exportRow),
+        clientUuid: row.client_uuid || row.CLIENT_UUID || '',
+      };
+    })
+    .filter(({ dateKey }) => isDateWithinScope(dateKey, managerDateScope))
     .filter(({ exportRow }) => activeManagerCompactFields.every((field) => {
       const filter = (managerTableFilters[field] || '').trim().toLowerCase();
       if (!filter) return true;
       return formatManagerCellValue(exportRow[field]).toLowerCase().includes(filter);
-    })), [activeManagerCompactFields, managerIsSaoJoao, managerRows, managerTableFilters]);
+    })), [activeManagerCompactFields, managerDateScope, managerIsSaoJoao, managerRows, managerTableFilters]);
+
+  const managerDateGroups = useMemo(() => {
+    const groupsByDate = new Map();
+    managerTableRows.forEach((item) => {
+      if (!groupsByDate.has(item.dateKey)) {
+        groupsByDate.set(item.dateKey, []);
+      }
+      groupsByDate.get(item.dateKey).push(item);
+    });
+
+    return Array.from(groupsByDate.entries())
+      .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+      .map(([dateKey, items]) => {
+        const operatorCount = new Set(items.map(({ exportRow }) => exportRow.OPERADOR || '-')).size;
+        const photoCount = items.filter(({ exportRow }) => String(exportRow.TEM_IMAGEM || '').toUpperCase() === 'SIM').length;
+        const completedCount = items.filter(({ exportRow }) => String(exportRow.IMPLANTACAO_CONCLUIDA || '').toUpperCase() === 'SIM').length;
+        return {
+          dateKey,
+          items,
+          operatorCount,
+          photoCount,
+          completedCount,
+        };
+      });
+  }, [managerTableRows]);
+
+  const managerTableColumnCount = activeManagerCompactFields.length + (managerIsSaoJoao ? 2 : 4);
 
   const selectedManagerIdSet = useMemo(
     () => new Set(selectedManagerRowIds),
@@ -3469,11 +3606,13 @@ export default function App() {
       },
       total_registros: operatorEntries.length,
       enviados: syncedOperatorEntries.length,
+      enviados_arquivados: archivedSentCount,
+      total_enviado_operador: totalSentByOperator,
       pendentes: pendingEntries.length,
       registros: operatorEntries,
     });
     setToast('Backup local baixado. Guarde esse arquivo em local seguro.');
-  }, [activeOperator, operatorEntries, pendingEntries.length, syncedOperatorEntries.length]);
+  }, [activeOperator, archivedSentCount, operatorEntries, pendingEntries.length, syncedOperatorEntries.length, totalSentByOperator]);
 
   const handleToggleEntryCompletion = useCallback((entryId, checked) => {
     setEntries((current) => current.map((entry) => {
@@ -3552,6 +3691,14 @@ export default function App() {
       return managerTableRows.map(({ clientUuid }) => clientUuid).filter(Boolean);
     });
   }, [managerTableRows, selectedManagerRows.length]);
+
+  const handleToggleManagerDateGroup = useCallback((dateKey) => {
+    setExpandedManagerDateGroups((current) => (
+      current.includes(dateKey)
+        ? current.filter((item) => item !== dateKey)
+        : [...current, dateKey]
+    ));
+  }, []);
 
   const handleGenerateManagerPdf = useCallback(async () => {
     if (managerIsSaoJoao) {
@@ -3858,12 +4005,34 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <div className="manager-date-filters" role="tablist" aria-label="Filtrar registros por período">
+                {[
+                  ['today', 'Hoje'],
+                  ['7d', 'Últimos 7 dias'],
+                  ['month', 'Este mês'],
+                  ['all', 'Todos'],
+                ].map(([scope, label]) => (
+                  <button
+                    key={scope}
+                    type="button"
+                    className={`manager-date-filter${managerDateScope === scope ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setManagerDateScope(scope);
+                      setExpandedManagerDateGroups([]);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {managerRowsLoading ? (
               <div className="placeholder-card">{managerRowsLoadingMessage}</div>
             ) : managerRows.length === 0 ? (
               <div className="placeholder-card">{managerTableEmptyMessage}</div>
+            ) : managerTableRows.length === 0 ? (
+              <div className="placeholder-card">Nenhum registro encontrado para este período ou filtro.</div>
             ) : (
               <div className="manager-table-scroll">
                 <table className="manager-submission-table">
@@ -3903,61 +4072,79 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {managerTableRows.map(({ row, exportRow, clientUuid, index }) => {
-                      const rowClientUuid = clientUuid;
-                      const isEditing = managerEditingClientUuid === rowClientUuid;
-                      const isSelected = selectedManagerIdSet.has(rowClientUuid);
+                    {managerDateGroups.map((group) => {
+                      const isGroupOpen = expandedManagerDateGroups.includes(group.dateKey);
                       return (
-                        <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`} className={isSelected ? 'is-selected' : ''}>
-                          {!managerIsSaoJoao && (
-                            <td data-label="PDF" className="manager-table-select-cell">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
-                                disabled={!rowClientUuid}
-                                aria-label={`Selecionar ponto ${index + 1} para PDF`}
-                              />
+                        <Fragment key={group.dateKey}>
+                          <tr className="manager-date-group-row">
+                            <td colSpan={managerTableColumnCount}>
+                              <button type="button" className="manager-date-group-button" onClick={() => handleToggleManagerDateGroup(group.dateKey)}>
+                                <strong>{isGroupOpen ? '−' : '+'} {formatDateKeyForDisplay(group.dateKey)}</strong>
+                                <span>{group.items.length} registro(s)</span>
+                                <span>{group.operatorCount} operador(es)</span>
+                                <span>{group.photoCount} com foto</span>
+                                {!managerIsSaoJoao && <span>{group.completedCount} concluído(s)</span>}
+                              </button>
                             </td>
-                          )}
-                          <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
-                          {activeManagerCompactFields.map((field) => (
-                            <td key={field} data-label={getManagerFieldLabel(field)}>
-                              {renderManagerTableCell(field, exportRow, isEditing)}
-                            </td>
-                          ))}
-                          <td data-label="Detalhes" className="manager-table-details-cell">
-                            <details className="manager-row-details">
-                              <summary>Ver dados</summary>
-                              {renderManagerDetailGroup(activeManagerDetailFields, exportRow, isEditing)}
-                            </details>
-                          </td>
-                          {!managerIsSaoJoao && (
-                            <td data-label="Ações" className="manager-table-actions-cell">
-                              <div className="manager-table-actions">
-                                {isEditing ? (
-                                  <>
-                                    <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(rowClientUuid)} disabled={managerRowActionId === rowClientUuid}>
-                                      Salvar
-                                    </button>
-                                    <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === rowClientUuid}>
-                                      Cancelar
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
-                                      Editar
-                                    </button>
-                                    <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === rowClientUuid || !rowClientUuid}>
-                                      Excluir
-                                    </button>
-                                  </>
+                          </tr>
+                          {isGroupOpen && group.items.map(({ row, exportRow, clientUuid, index }) => {
+                            const rowClientUuid = clientUuid;
+                            const isEditing = managerEditingClientUuid === rowClientUuid;
+                            const isSelected = selectedManagerIdSet.has(rowClientUuid);
+                            return (
+                              <tr key={rowClientUuid || `${row.operador || 'ponto'}-${row.synced_em || ''}`} className={isSelected ? 'is-selected' : ''}>
+                                {!managerIsSaoJoao && (
+                                  <td data-label="PDF" className="manager-table-select-cell">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => handleToggleManagerRowSelection(rowClientUuid)}
+                                      disabled={!rowClientUuid}
+                                      aria-label={`Selecionar ponto ${index + 1} para PDF`}
+                                    />
+                                  </td>
                                 )}
-                              </div>
-                            </td>
-                          )}
-                        </tr>
+                                <td data-label="Item" className="manager-table-item-cell">{index + 1}</td>
+                                {activeManagerCompactFields.map((field) => (
+                                  <td key={field} data-label={getManagerFieldLabel(field)}>
+                                    {renderManagerTableCell(field, exportRow, isEditing)}
+                                  </td>
+                                ))}
+                                <td data-label="Detalhes" className="manager-table-details-cell">
+                                  <details className="manager-row-details">
+                                    <summary>Ver dados</summary>
+                                    {renderManagerDetailGroup(activeManagerDetailFields, exportRow, isEditing)}
+                                  </details>
+                                </td>
+                                {!managerIsSaoJoao && (
+                                  <td data-label="Ações" className="manager-table-actions-cell">
+                                    <div className="manager-table-actions">
+                                      {isEditing ? (
+                                        <>
+                                          <button type="button" className="primary-action manager-table-button" onClick={() => handleSaveManagerEdit(rowClientUuid)} disabled={managerRowActionId === rowClientUuid}>
+                                            Salvar
+                                          </button>
+                                          <button type="button" className="ghost-action manager-table-button" onClick={() => setManagerEditingClientUuid('')} disabled={managerRowActionId === rowClientUuid}>
+                                            Cancelar
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <button type="button" className="ghost-action manager-table-button" onClick={() => handleStartManagerEdit(row)}>
+                                            Editar
+                                          </button>
+                                          <button type="button" className="ghost-action manager-table-button manager-table-delete" onClick={() => handleDeleteManagerRow(row)} disabled={managerRowActionId === rowClientUuid || !rowClientUuid}>
+                                            Excluir
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -4580,6 +4767,11 @@ export default function App() {
               <span>
                 {syncedOperatorEntries.length} enviado(s) · {syncablePendingEntries.length} pronto(s) · {awaitingConfirmationEntries.length} aguardando finalização · {errorOperatorEntries.length} com erro · {online ? 'online' : 'offline'}
               </span>
+            </div>
+            <div className="queue-history-counter">
+              <strong>{totalSentByOperator}</strong>
+              <span>Total enviado por você</span>
+              {archivedSentCount > 0 && <small>{archivedSentCount} envio(s) antigo(s) já limpo(s) do aparelho</small>}
             </div>
             <div className="queue-filters" role="tablist" aria-label="Filtrar fila local">
               <button
