@@ -385,25 +385,24 @@ const SAO_JOAO_QUESTION_BY_KEY = Object.fromEntries(SAO_JOAO_QUESTION_ITEMS.map(
 const SAO_JOAO_PHOTO_BY_KEY = Object.fromEntries(SAO_JOAO_PHOTO_FIELDS.map((photo) => [photo.key, photo]));
 const SAO_JOAO_OTHER_POLO = 'Outro (Digite)';
 const SAO_JOAO_FIXED_POLO_OPTIONS = [
-  'Sítio Trindade',
   'Avenida Rio Branco',
-  'Parque das Graças',
-  'Lagoa do Araçá',
   'Barro',
-  'Totó',
+  'Bongi',
+  'Brasília Teimosa',
   'Campo Grande',
   'Cordeiro',
   'Ibura',
-  'Poço da Panela',
-  'Bongi',
-  'Vila Tamandaré',
-  'Brasília Teimosa',
+  'Lagoa do Araçá',
+  'Parque das Graças',
   'Pátio de São Pedro',
+  'Poço da Panela',
+  'Sítio Trindade',
+  'Totó',
+  'Vila Tamandaré',
 ];
 const SAO_JOAO_POLO_OPTIONS = [
-  ...SAO_JOAO_FIXED_POLO_OPTIONS.slice(0, 9),
+  ...SAO_JOAO_FIXED_POLO_OPTIONS,
   SAO_JOAO_OTHER_POLO,
-  ...SAO_JOAO_FIXED_POLO_OPTIONS.slice(9),
 ];
 const SAO_JOAO_EXPORT_FIELDS = [
   'POLO_NOME',
