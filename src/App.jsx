@@ -2110,9 +2110,7 @@ export default function App() {
   const [saoJoaoEntries, setSaoJoaoEntries] = useState(() => getStoredSaoJoaoQueue());
   const [saoJoaoSyncing, setSaoJoaoSyncing] = useState(false);
   const [saoJoaoImageLoadingKey, setSaoJoaoImageLoadingKey] = useState('');
-  const [expandedSaoJoaoGroups, setExpandedSaoJoaoGroups] = useState(() => (
-    SAO_JOAO_QUESTIONS[0]?.group ? [SAO_JOAO_QUESTIONS[0].group] : []
-  ));
+  const [expandedSaoJoaoGroups, setExpandedSaoJoaoGroups] = useState([]);
   const [sentStats, setSentStats] = useState(() => getStoredSentStats());
 
   const canConfirmLocation = useMemo(
