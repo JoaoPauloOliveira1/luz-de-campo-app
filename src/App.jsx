@@ -383,6 +383,28 @@ const SAO_JOAO_PHOTO_FIELDS = SAO_JOAO_QUESTIONS.flatMap((group) => group.items.
 const SAO_JOAO_QUESTION_ITEMS = SAO_JOAO_QUESTIONS.flatMap((group) => group.items);
 const SAO_JOAO_QUESTION_BY_KEY = Object.fromEntries(SAO_JOAO_QUESTION_ITEMS.map((question) => [question.key, question]));
 const SAO_JOAO_PHOTO_BY_KEY = Object.fromEntries(SAO_JOAO_PHOTO_FIELDS.map((photo) => [photo.key, photo]));
+const SAO_JOAO_OTHER_POLO = 'Outro (Digite)';
+const SAO_JOAO_FIXED_POLO_OPTIONS = [
+  'Sítio Trindade',
+  'Avenida Rio Branco',
+  'Parque das Graças',
+  'Lagoa do Araçá',
+  'Barro',
+  'Totó',
+  'Campo Grande',
+  'Cordeiro',
+  'Ibura',
+  'Poço da Panela',
+  'Bongi',
+  'Vila Tamandaré',
+  'Brasília Teimosa',
+  'Pátio de São Pedro',
+];
+const SAO_JOAO_POLO_OPTIONS = [
+  ...SAO_JOAO_FIXED_POLO_OPTIONS.slice(0, 9),
+  SAO_JOAO_OTHER_POLO,
+  ...SAO_JOAO_FIXED_POLO_OPTIONS.slice(9),
+];
 const SAO_JOAO_EXPORT_FIELDS = [
   'POLO_NOME',
   'OPERADOR',
@@ -1251,6 +1273,7 @@ function getStoredSentStats() {
 function createInitialSaoJoaoForm(operator) {
   return {
     POLO_NOME: '',
+    POLO_OUTRO_ATIVO: false,
     LATITUDE: '',
     LONGITUDE: '',
     OBSERVACOES: '',
@@ -2773,6 +2796,25 @@ export default function App() {
       ...current,
       [field]: value,
     }));
+  }, []);
+
+  const handleSaoJoaoPoloSelection = useCallback((value) => {
+    setSaoJoaoForm((current) => {
+      if (value === SAO_JOAO_OTHER_POLO) {
+        const currentIsPreset = SAO_JOAO_FIXED_POLO_OPTIONS.includes(current.POLO_NOME);
+        return {
+          ...current,
+          POLO_OUTRO_ATIVO: true,
+          POLO_NOME: currentIsPreset ? '' : current.POLO_NOME,
+        };
+      }
+
+      return {
+        ...current,
+        POLO_OUTRO_ATIVO: false,
+        POLO_NOME: value,
+      };
+    });
   }, []);
 
   const handleSaoJoaoAnswerChange = useCallback((field, value) => {
@@ -4307,6 +4349,11 @@ export default function App() {
 
   if (activeModule === 'sao-joao') {
     const pendingSaoJoaoEntries = saoJoaoEntries.filter((entry) => entry.__syncStatus !== 'synced');
+    const saoJoaoPoloIsPreset = SAO_JOAO_FIXED_POLO_OPTIONS.includes(saoJoaoForm.POLO_NOME);
+    const selectedSaoJoaoPoloOption = saoJoaoForm.POLO_OUTRO_ATIVO || (saoJoaoForm.POLO_NOME && !saoJoaoPoloIsPreset)
+      ? SAO_JOAO_OTHER_POLO
+      : saoJoaoForm.POLO_NOME || '';
+    const isSaoJoaoOtherPolo = selectedSaoJoaoPoloOption === SAO_JOAO_OTHER_POLO;
 
     return (
       <div className="field-app sao-joao-app">
@@ -4336,13 +4383,28 @@ export default function App() {
 
             <div className="sao-joao-top-grid">
               <label className="form-field full">
-                <span>Nome do polo</span>
-                <input
-                  value={saoJoaoForm.POLO_NOME}
-                  placeholder="Ex.: Polo Casa Amarela"
-                  onChange={(event) => handleSaoJoaoFieldChange('POLO_NOME', event.target.value)}
-                />
+                <span>Polo</span>
+                <select
+                  value={selectedSaoJoaoPoloOption}
+                  onChange={(event) => handleSaoJoaoPoloSelection(event.target.value)}
+                >
+                  <option value="">Selecione o polo</option>
+                  {SAO_JOAO_POLO_OPTIONS.map((polo) => (
+                    <option key={polo} value={polo}>{polo}</option>
+                  ))}
+                </select>
               </label>
+
+              {isSaoJoaoOtherPolo && (
+                <label className="form-field full">
+                  <span>Digite o polo</span>
+                  <input
+                    value={saoJoaoForm.POLO_NOME}
+                    placeholder="Digite o nome do polo"
+                    onChange={(event) => handleSaoJoaoFieldChange('POLO_NOME', event.target.value)}
+                  />
+                </label>
+              )}
 
               <label className="form-field">
                 <span>Latitude</span>
