@@ -227,6 +227,7 @@ const SESSION_STORAGE_KEY = 'luz-de-campo-session';
 const MODULE_STORAGE_KEY = 'luz-de-campo-active-module';
 const QUEUE_STORAGE_KEY = 'luz-de-campo-queue';
 const SAO_JOAO_QUEUE_STORAGE_KEY = 'luz-de-campo-sao-joao-queue';
+const SAO_JOAO_DRAFT_STORAGE_KEY = 'luz-de-campo-sao-joao-draft';
 const SENT_STATS_STORAGE_KEY = 'luz-de-campo-sent-stats';
 const LOCATION_CONTEXT_CACHE_KEY = 'luz-de-campo-location-context';
 const OFFLINE_ACCESS_STORAGE_KEY = 'luz-de-campo-offline-access';
@@ -1256,6 +1257,73 @@ function getStoredSaoJoaoQueue() {
   }
 }
 
+function getSaoJoaoDraftStorageKey(operator) {
+  return `${SAO_JOAO_DRAFT_STORAGE_KEY}:${operator?.id || 'sem-operador'}`;
+}
+
+function isSaoJoaoDraftEmpty(form) {
+  if (!form) return true;
+  const hasMainFields = [
+    form.POLO_NOME,
+    form.LATITUDE,
+    form.LONGITUDE,
+    form.OBSERVACOES,
+  ].some((value) => String(value ?? '').trim());
+  const hasAnswers = Object.values(form.RESPOSTAS || {}).some((value) => String(value ?? '').trim());
+  const hasImages = Object.keys(form.IMAGENS || {}).length > 0;
+
+  return !hasMainFields && !hasAnswers && !hasImages;
+}
+
+function normalizeSaoJoaoDraft(rawDraft, operator) {
+  const baseForm = createInitialSaoJoaoForm(operator);
+  if (!rawDraft || typeof rawDraft !== 'object' || Array.isArray(rawDraft)) return baseForm;
+
+  return {
+    ...baseForm,
+    ...rawDraft,
+    POLO_NOME: rawDraft.POLO_NOME || '',
+    POLO_OUTRO_ATIVO: Boolean(rawDraft.POLO_OUTRO_ATIVO),
+    LATITUDE: rawDraft.LATITUDE || '',
+    LONGITUDE: rawDraft.LONGITUDE || '',
+    OBSERVACOES: rawDraft.OBSERVACOES || '',
+    RESPOSTAS: rawDraft.RESPOSTAS && typeof rawDraft.RESPOSTAS === 'object' ? rawDraft.RESPOSTAS : {},
+    IMAGENS: rawDraft.IMAGENS && typeof rawDraft.IMAGENS === 'object' ? rawDraft.IMAGENS : {},
+    OPERADOR: operator?.name || rawDraft.OPERADOR || '',
+    OPERADOR_ID: operator?.id || rawDraft.OPERADOR_ID || null,
+  };
+}
+
+function getStoredSaoJoaoDraft(operator) {
+  if (typeof window === 'undefined') return createInitialSaoJoaoForm(operator);
+
+  try {
+    const rawDraft = window.localStorage.getItem(getSaoJoaoDraftStorageKey(operator));
+    if (!rawDraft) return createInitialSaoJoaoForm(operator);
+    return normalizeSaoJoaoDraft(JSON.parse(rawDraft), operator);
+  } catch {
+    return createInitialSaoJoaoForm(operator);
+  }
+}
+
+function saveStoredSaoJoaoDraft(operator, form) {
+  if (typeof window === 'undefined' || !operator) return;
+  try {
+    window.localStorage.setItem(getSaoJoaoDraftStorageKey(operator), JSON.stringify(form));
+  } catch {
+    // O checklist continua na tela mesmo se o navegador recusar rascunhos grandes com fotos.
+  }
+}
+
+function removeStoredSaoJoaoDraft(operator) {
+  if (typeof window === 'undefined' || !operator) return;
+  try {
+    window.localStorage.removeItem(getSaoJoaoDraftStorageKey(operator));
+  } catch {
+    // Sem ação: falha ao limpar rascunho local não deve bloquear o formulário.
+  }
+}
+
 function getStoredSentStats() {
   if (typeof window === 'undefined') return {};
 
@@ -2035,10 +2103,16 @@ export default function App() {
   const [managerUserActionId, setManagerUserActionId] = useState(null);
   const [autofocusRequestId, setAutofocusRequestId] = useState(0);
   const [guidedFieldKey, setGuidedFieldKey] = useState('');
-  const [saoJoaoForm, setSaoJoaoForm] = useState(() => createInitialSaoJoaoForm(getStoredOperator()));
+  const [saoJoaoForm, setSaoJoaoForm] = useState(() => {
+    const storedOperator = getStoredOperator();
+    return getStoredSaoJoaoDraft(storedOperator);
+  });
   const [saoJoaoEntries, setSaoJoaoEntries] = useState(() => getStoredSaoJoaoQueue());
   const [saoJoaoSyncing, setSaoJoaoSyncing] = useState(false);
   const [saoJoaoImageLoadingKey, setSaoJoaoImageLoadingKey] = useState('');
+  const [expandedSaoJoaoGroups, setExpandedSaoJoaoGroups] = useState(() => (
+    SAO_JOAO_QUESTIONS[0]?.group ? [SAO_JOAO_QUESTIONS[0].group] : []
+  ));
   const [sentStats, setSentStats] = useState(() => getStoredSentStats());
 
   const canConfirmLocation = useMemo(
@@ -2191,6 +2265,21 @@ export default function App() {
   }, [saoJoaoEntries]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !activeOperator) return undefined;
+
+    const timer = window.setTimeout(() => {
+      if (isSaoJoaoDraftEmpty(saoJoaoForm)) {
+        removeStoredSaoJoaoDraft(activeOperator);
+        return;
+      }
+
+      saveStoredSaoJoaoDraft(activeOperator, saoJoaoForm);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [activeOperator, saoJoaoForm]);
+
+  useEffect(() => {
     if (!activeOperator) return undefined;
     let active = true;
 
@@ -2229,7 +2318,11 @@ export default function App() {
       OPERADOR: activeOperator.name,
     }));
     setSaoJoaoForm((current) => ({
-      ...current,
+      ...(
+        isSaoJoaoDraftEmpty(current)
+          ? getStoredSaoJoaoDraft(activeOperator)
+          : current
+      ),
       OPERADOR: activeOperator.name,
       OPERADOR_ID: activeOperator.id,
     }));
@@ -2826,6 +2919,14 @@ export default function App() {
     }));
   }, []);
 
+  const handleToggleSaoJoaoGroup = useCallback((groupName) => {
+    setExpandedSaoJoaoGroups((current) => (
+      current.includes(groupName)
+        ? current.filter((name) => name !== groupName)
+        : [...current, groupName]
+    ));
+  }, []);
+
   const handleSaoJoaoImageSelection = useCallback(async (fieldKey, event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -2907,6 +3008,7 @@ export default function App() {
     };
 
     setSaoJoaoEntries((current) => [nextEntry, ...current]);
+    removeStoredSaoJoaoDraft(activeOperator);
     setSaoJoaoForm(createInitialSaoJoaoForm(activeOperator));
     setToast('Checklist salvo na fila local.');
   }, [activeOperator, saoJoaoForm]);
@@ -4377,7 +4479,7 @@ export default function App() {
             <div className="panel-header">
               <span className="panel-step">Checklist</span>
               <strong>Vistoria do polo</strong>
-              <small>Preencha somente o que for verificado. As fotos são opcionais e ficam vinculadas à pergunta.</small>
+              <small>Preencha somente o que for verificado. O rascunho fica salvo neste aparelho.</small>
             </div>
 
             <div className="sao-joao-top-grid">
@@ -4448,65 +4550,91 @@ export default function App() {
             </div>
 
             <div className="sao-joao-question-groups">
-              {SAO_JOAO_QUESTIONS.map((group) => (
-                <section key={group.group} className="sao-joao-question-group">
-                  <h2>{group.group}</h2>
-                  {group.items.map((question) => (
-                    <article key={question.key} className="sao-joao-question-card">
-                      <div className="sao-joao-question-copy">
-                        <strong>{question.label}</strong>
-                      </div>
-                      <div className="quick-picks">
-                        {SAO_JOAO_ANSWER_OPTIONS.map((option) => (
-                          <button
-                            key={option}
-                            type="button"
-                            className={`quick-pick${saoJoaoForm.RESPOSTAS?.[question.key] === option ? ' active' : ''}`}
-                            onClick={() => handleSaoJoaoAnswerChange(question.key, option)}
-                          >
-                            {option}
-                          </button>
+              {SAO_JOAO_QUESTIONS.map((group) => {
+                const isExpanded = expandedSaoJoaoGroups.includes(group.group);
+                const answeredCount = group.items.filter((question) => (
+                  String(saoJoaoForm.RESPOSTAS?.[question.key] ?? '').trim()
+                )).length;
+                const photoCount = group.items.reduce((total, question) => (
+                  total + (question.photos || []).filter((photo) => saoJoaoForm.IMAGENS?.[photo.key]).length
+                ), 0);
+
+                return (
+                  <section key={group.group} className={`sao-joao-question-group${isExpanded ? ' is-open' : ' is-collapsed'}`}>
+                    <button
+                      type="button"
+                      className="sao-joao-group-toggle"
+                      onClick={() => handleToggleSaoJoaoGroup(group.group)}
+                      aria-expanded={isExpanded}
+                    >
+                      <span>
+                        <strong>{group.group}</strong>
+                        <small>{answeredCount}/{group.items.length} resposta(s) · {photoCount} foto(s)</small>
+                      </span>
+                      <b>{isExpanded ? 'Recolher' : 'Abrir'}</b>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="sao-joao-question-list">
+                        {group.items.map((question) => (
+                          <article key={question.key} className="sao-joao-question-card">
+                            <div className="sao-joao-question-copy">
+                              <strong>{question.label}</strong>
+                            </div>
+                            <div className="quick-picks">
+                              {SAO_JOAO_ANSWER_OPTIONS.map((option) => (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  className={`quick-pick${saoJoaoForm.RESPOSTAS?.[question.key] === option ? ' active' : ''}`}
+                                  onClick={() => handleSaoJoaoAnswerChange(question.key, option)}
+                                >
+                                  {option}
+                                </button>
+                              ))}
+                            </div>
+
+                            {(question.photos || []).map((photo) => {
+                              const image = saoJoaoForm.IMAGENS?.[photo.key];
+                              return (
+                                <div key={photo.key} className="sao-joao-photo-slot">
+                                  <span>{photo.label}</span>
+                                  <div className="image-actions">
+                                    <label className="image-upload-action">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="image-upload-input"
+                                        onChange={(event) => handleSaoJoaoImageSelection(photo.key, event)}
+                                      />
+                                      {saoJoaoImageLoadingKey === photo.key ? 'Preparando...' : image ? 'Trocar foto' : 'Adicionar foto'}
+                                    </label>
+                                    {image && (
+                                      <button type="button" className="shortcut-action shortcut-action-light" onClick={() => handleRemoveSaoJoaoImage(photo.key)}>
+                                        Remover
+                                      </button>
+                                    )}
+                                  </div>
+                                  {image && (
+                                    <div className="image-preview-card sao-joao-preview-card">
+                                      <img src={image.data_url} alt={photo.label} className="image-preview" />
+                                      <div className="image-preview-copy">
+                                        <strong>{image.filename}</strong>
+                                        <span>{Math.round(image.size_bytes / 1024)} KB</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </article>
                         ))}
                       </div>
-
-                      {(question.photos || []).map((photo) => {
-                        const image = saoJoaoForm.IMAGENS?.[photo.key];
-                        return (
-                          <div key={photo.key} className="sao-joao-photo-slot">
-                            <span>{photo.label}</span>
-                            <div className="image-actions">
-                              <label className="image-upload-action">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  className="image-upload-input"
-                                  onChange={(event) => handleSaoJoaoImageSelection(photo.key, event)}
-                                />
-                                {saoJoaoImageLoadingKey === photo.key ? 'Preparando...' : image ? 'Trocar foto' : 'Adicionar foto'}
-                              </label>
-                              {image && (
-                                <button type="button" className="shortcut-action shortcut-action-light" onClick={() => handleRemoveSaoJoaoImage(photo.key)}>
-                                  Remover
-                                </button>
-                              )}
-                            </div>
-                            {image && (
-                              <div className="image-preview-card sao-joao-preview-card">
-                                <img src={image.data_url} alt={photo.label} className="image-preview" />
-                                <div className="image-preview-copy">
-                                  <strong>{image.filename}</strong>
-                                  <span>{Math.round(image.size_bytes / 1024)} KB</span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </article>
-                  ))}
-                </section>
-              ))}
+                    )}
+                  </section>
+                );
+              })}
             </div>
 
             <label className="form-field full">
