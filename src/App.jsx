@@ -572,6 +572,17 @@ function downloadJsonFile(filename, payload) {
   URL.revokeObjectURL(url);
 }
 
+function downloadBlobFile(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function parseDateValue(value) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -1948,6 +1959,27 @@ async function fetchSaoJoaoExport() {
     throw new Error('Não foi possível carregar as vistorias do São João.');
   }
   return response.json();
+}
+
+async function fetchSaoJoaoTechnicalNote(payload) {
+  const response = await fetch(`${FIELD_API_BASE_URL}/sao-joao-submissions/technical-note`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, 'Não foi possível gerar a Nota Técnica.'));
+  }
+
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return {
+    blob: await response.blob(),
+    filename: filenameMatch?.[1] || `nota_tecnica_sao_joao_${new Date().toISOString().slice(0, 10)}.docx`,
+  };
 }
 
 async function markSubmissionsExported(clientUuids, exportedByOperatorId) {
@@ -3855,6 +3887,34 @@ export default function App() {
     }
   }, [activeOperator, loadManagerSummary, managerIsSaoJoao]);
 
+  const handleGenerateSaoJoaoTechnicalNote = useCallback(async (clientUuid, exportRow) => {
+    if (!activeOperator?.can_export || !clientUuid) return;
+    const managerAccessCode = managerUserForm.managerAccessCode.trim();
+    if (!managerAccessCode) {
+      setToast('Informe o código gerencial na área de Acessos para gerar a NT.');
+      return;
+    }
+
+    const noteNumber = window.prompt('Número da Nota Técnica:', '');
+    if (noteNumber === null) return;
+
+    try {
+      setManagerRowActionId(clientUuid);
+      const { blob, filename } = await fetchSaoJoaoTechnicalNote({
+        manager_operator_id: activeOperator.id,
+        manager_access_code: managerAccessCode,
+        client_uuid: clientUuid,
+        note_number: noteNumber.trim(),
+      });
+      downloadBlobFile(filename, blob);
+      setToast(`Nota Técnica gerada para ${exportRow?.POLO_NOME || 'vistoria do São João'}.`);
+    } catch (error) {
+      setToast(error.message || 'Não foi possível gerar a Nota Técnica.');
+    } finally {
+      setManagerRowActionId('');
+    }
+  }, [activeOperator, managerUserForm.managerAccessCode]);
+
   const handleToggleManagerRowSelection = useCallback((rowId) => {
     if (!rowId) return;
     setSelectedManagerRowIds((current) => (
@@ -4304,6 +4364,16 @@ export default function App() {
                                   <details className="manager-row-details">
                                     <summary>Ver dados</summary>
                                     {renderManagerDetailGroup(activeManagerDetailFields, exportRow, isEditing)}
+                                    {managerIsSaoJoao && (
+                                      <button
+                                        type="button"
+                                        className="primary-action manager-table-button manager-technical-note-button"
+                                        onClick={() => handleGenerateSaoJoaoTechnicalNote(rowClientUuid, exportRow)}
+                                        disabled={managerRowActionId === rowClientUuid || !rowClientUuid}
+                                      >
+                                        {managerRowActionId === rowClientUuid ? 'Gerando NT...' : 'Gerar NT'}
+                                      </button>
+                                    )}
                                   </details>
                                 </td>
                                 {!managerIsSaoJoao && (

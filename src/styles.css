@@ -1788,6 +1788,10 @@ select {
   white-space: nowrap;
 }
 
+.manager-technical-note-button {
+  margin-top: 10px;
+}
+
 .manager-table-delete {
   border-color: rgba(190, 18, 60, 0.18);
   color: #be123c;
