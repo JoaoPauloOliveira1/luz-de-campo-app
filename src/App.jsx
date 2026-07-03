@@ -517,6 +517,31 @@ function parseManualCoordinates(rawValue) {
   return { lat, lng };
 }
 
+function normalizeRpaValue(value) {
+  const cleaned = String(value ?? '').trim().replace(/^RPA/i, '').trim();
+  if (!cleaned) return '';
+
+  const numericMatch = cleaned.match(/\d+/);
+  return numericMatch ? String(Number.parseInt(numericMatch[0], 10)) : cleaned.replace(/["']/g, '');
+}
+
+function normalizeRpaOptions(values) {
+  const uniqueValues = new Set();
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const normalized = normalizeRpaValue(value);
+    if (normalized) uniqueValues.add(normalized);
+  });
+
+  return Array.from(uniqueValues).sort((first, second) => {
+    const firstNumber = Number(first);
+    const secondNumber = Number(second);
+    if (Number.isFinite(firstNumber) && Number.isFinite(secondNumber)) {
+      return firstNumber - secondNumber;
+    }
+    return first.localeCompare(second, 'pt-BR', { numeric: true });
+  });
+}
+
 function toNumber(value) {
   if (value === null || value === undefined || value === '') return Number.NaN;
   return Number(String(value).replace(',', '.'));
@@ -2400,7 +2425,7 @@ export default function App() {
     fetchRpaOptions()
       .then((options) => {
         if (!active) return;
-        setRpaOptions(options);
+        setRpaOptions(normalizeRpaOptions(options));
       })
       .catch(() => {
         if (!active) return;
@@ -2784,18 +2809,21 @@ export default function App() {
   }, []);
 
   const handleToggleOfflineRpa = useCallback((rpa) => {
+    const normalizedRpa = normalizeRpaValue(rpa);
+    if (!normalizedRpa) return;
+
     setAccessForm((current) => {
-      const currentValues = current.offlineRpas || [];
-      const exists = currentValues.includes(rpa);
+      const currentValues = normalizeRpaOptions(current.offlineRpas || []);
+      const exists = currentValues.includes(normalizedRpa);
       if (exists) {
-        return { ...current, offlineRpas: currentValues.filter((item) => item !== rpa) };
+        return { ...current, offlineRpas: currentValues.filter((item) => item !== normalizedRpa) };
       }
       if (currentValues.length >= MAX_OFFLINE_RPAS) {
         setAuthError(`Escolha no máximo ${MAX_OFFLINE_RPAS} RPAs para o preparo offline.`);
         setAuthInfo('');
         return current;
       }
-      return { ...current, offlineRpas: [...currentValues, rpa] };
+      return { ...current, offlineRpas: [...currentValues, normalizedRpa] };
     });
   }, []);
 
